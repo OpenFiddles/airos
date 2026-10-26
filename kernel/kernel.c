@@ -554,7 +554,7 @@ static void splash_frame(u8 bg) {
         }
     }
     splash_text(14, "OpenFiddles", 0x0F, bg);
-    splash_text(16, "Textile OS", 0x07, bg);
+    splash_text(16, "OpenAir", 0x07, bg);
 }
 
 static void boot_splash(void) {
@@ -562,7 +562,7 @@ static void boot_splash(void) {
     for (int cycle = 0; cycle < 4; cycle++)
         for (int f = 0; f < 12; f++) {
             splash_frame(pulse[f]);
-            wait_ticks(5);
+            wait_ticks(10);
         }
 }
 
