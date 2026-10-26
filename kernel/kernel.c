@@ -481,12 +481,13 @@ static void put_mac(const u8 *mac) {
     }
 }
 
-static void draw_sqr(u32 x, u32 y) {
+void draw_sqr(u32 x, u32 y) {
     u16 cell = (u16)(0xDB | (ATTR_SQR << 8));
     for (u32 dy = 0; dy < 2; dy++)
         for (u32 dx = 0; dx < 2; dx++)
             VGA_MEM[(y + dy) * VGA_COLS + x + dx] = cell;
 }
+
 
 static int slen(const char *s) {
     int n = 0;
