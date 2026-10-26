@@ -1,9 +1,10 @@
-; Stage 1 boot sector: loads the kernel (floppy LBA 1..64) to 0x10000,
-; then enters 32-bit protected mode and jumps to the kernel entry.
+; Stage 1 boot sector: loads the kernel (LBA 1..96) to 0x10000 and the app (LBA 97..104)
+; to 0x20000, then enters 32-bit protected mode and jumps to the kernel entry.
 [BITS 16]
 [ORG 0x7C00]
 
-KERNEL_SECTORS equ 64
+KERNEL_SECTORS equ 96
+APP_SECTORS equ 8
 
 start:
     cli
@@ -22,8 +23,26 @@ start:
     mov es, ax
     mov word [lba], 1
     mov word [offset], 0
+    mov word [remaining], KERNEL_SECTORS
+    call load_range
 
+    mov ax, 0x2000
+    mov es, ax
+    mov word [offset], 0
+    mov word [remaining], APP_SECTORS
+    call load_range
+
+    cli
+    lgdt [gdt_descriptor]
+    mov eax, cr0
+    or eax, 1
+    mov cr0, eax
+    jmp dword 0x08:protected_entry
+
+load_range:
 .load:
+    cmp word [remaining], 0
+    je .done
     mov ax, [lba]
     xor dx, dx
     mov cx, 36
@@ -44,15 +63,10 @@ start:
     jc disk_error
     add word [offset], 512
     inc word [lba]
-    cmp word [lba], KERNEL_SECTORS + 1
-    jb .load
-
-    cli
-    lgdt [gdt_descriptor]
-    mov eax, cr0
-    or eax, 1
-    mov cr0, eax
-    jmp dword 0x08:protected_entry
+    dec word [remaining]
+    jmp .load
+.done:
+    ret
 
 disk_error:
     mov si, msg_disk
@@ -87,6 +101,7 @@ protected_entry:
 boot_drive  db 0
 lba         dw 0
 offset      dw 0
+remaining   dw 0
 track       db 0
 msg_loading db "Loading Textile OS...", 13, 10, 0
 msg_disk    db "Disk read error", 13, 10, 0

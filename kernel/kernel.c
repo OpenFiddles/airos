@@ -1,8 +1,12 @@
-/* Textile OS kernel: VGA console, COM1 mirror, PIC, PIT timer, PS/2 keyboard, CMOS clock and port I/O shell. */
+/* Textile OS kernel: VGA console, COM1 mirror, PIC, PIT, PS/2 keyboard, CMOS clock, RTL8139 probe,
+   tween engine, PC speaker, int 0x80 syscall gate and a flat app loaded at TX_APP_BASE. */
+
+#include "../include/textile.h"
 
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned int u32;
+typedef int i32;
 
 #define VGA_COLS 80
 #define VGA_ROWS 25
@@ -11,6 +15,13 @@ typedef unsigned int u32;
 #define ATTR_TEXT 0x07
 #define ATTR_OK 0x0A
 #define ATTR_ERR 0x0C
+#define ATTR_SQR 0x0B
+#define PCI_ADDR 0xCF8
+#define PCI_DATA 0xCFC
+#define RTL_VENDOR 0x10EC
+#define RTL_DEVICE 0x8139
+#define ANIM_SLOTS 16
+#define PCI_SLOT_MAX 32
 
 static inline void outb(u16 port, u8 value) {
     __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
@@ -22,15 +33,17 @@ static inline u8 inb(u16 port) {
     return value;
 }
 
-static inline void io_wait(void) { outb(0x80, 0); }
 static inline void outl(u16 port, u32 value) {
     __asm__ volatile ("outl %0, %1" : : "a"(value), "Nd"(port));
 }
+
 static inline u32 inl(u16 port) {
     u32 value;
     __asm__ volatile ("inl %1, %0" : "=a"(value) : "Nd"(port));
     return value;
 }
+
+static inline void io_wait(void) { outb(0x80, 0); }
 static inline void irq_on(void) { __asm__ volatile ("sti"); }
 static inline void irq_off(void) { __asm__ volatile ("cli"); }
 static inline void halt(void) { __asm__ volatile ("hlt"); }
@@ -163,21 +176,24 @@ static struct idt_entry idt[256];
 void isr_timer(void);
 void isr_keyboard(void);
 void isr_fault(void);
+void isr_syscall(void);
 
-static void idt_set(int n, void (*handler)(void)) {
+static void idt_set(int n, void (*handler)(void), u8 flags) {
     u32 addr = (u32)handler;
     idt[n].offset_low = (u16)(addr & 0xFFFF);
     idt[n].selector = 0x08;
     idt[n].zero = 0;
-    idt[n].flags = 0x8E;
+    idt[n].flags = flags;
     idt[n].offset_high = (u16)(addr >> 16);
 }
 
 static void idt_init(void) {
     for (int i = 0; i < 32; i++)
-        idt_set(i, isr_fault);
-    idt_set(0x20, isr_timer);
-    idt_set(0x21, isr_keyboard);
+        idt_set(i, isr_fault, 0x8E);
+    idt_set(0x20, isr_timer, 0x8E);
+    idt_set(0x21, isr_keyboard, 0x8E);
+    /* Trap gate (0x8F) keeps interrupts enabled while a syscall sleeps. */
+    idt_set(0x80, isr_syscall, 0x8F);
     struct idt_ptr ptr = { (u16)(sizeof(idt) - 1), (u32)idt };
     __asm__ volatile ("lidt %0" : : "m"(ptr));
 }
@@ -207,6 +223,12 @@ static volatile u32 ticks;
 void timer_irq(void) {
     ticks++;
     outb(0x20, 0x20);
+}
+
+static void wait_ticks(u32 n) {
+    u32 start = ticks;
+    while (ticks - start < n)
+        halt();
 }
 
 static const char kmap[0x3A] = {
@@ -260,6 +282,71 @@ static int kbd_read(void) {
         c = kbuf[kbuf_tail++];
     irq_on();
     return c;
+}
+
+static void speaker_off(void) {
+    outb(0x61, inb(0x61) & 0xFC);
+}
+
+/* Blocking square-wave tone on PIT channel 2 routed to the PC speaker. */
+static void sound_tone(u32 hz, u32 ms) {
+    if (hz < 20 || hz > 20000) {
+        speaker_off();
+        return;
+    }
+    u32 div = 1193182u / hz;
+    outb(0x43, 0xB6);
+    outb(0x42, (u8)(div & 0xFF));
+    outb(0x42, (u8)(div >> 8));
+    outb(0x61, inb(0x61) | 0x03);
+    wait_ticks((ms + 5) / 10);
+    speaker_off();
+}
+
+struct tween {
+    u8 used;
+    u8 ease;
+    u32 dur;
+    u32 start;
+    i32 from;
+    i32 to;
+};
+
+static struct tween tweens[ANIM_SLOTS];
+
+/* Easing on a 0..1000 scale in, 0..1000 out. */
+static u32 ease_apply(u8 kind, u32 x) {
+    if (kind == EASE_LINEAR)
+        return x;
+    if (kind == EASE_OUT_CUBIC) {
+        u32 p = 1000 - x;
+        u32 p2 = p * p / 1000;
+        u32 p3 = p2 * p / 1000;
+        return 1000 - p3;
+    }
+    return (x * x / 1000) * (3000 - 2 * x) / 1000;
+}
+
+static void anim_start(u32 slot, u8 ease, u32 dur, i32 from, i32 to) {
+    struct tween *t = &tweens[slot % ANIM_SLOTS];
+    t->used = 1;
+    t->ease = ease;
+    t->dur = dur ? dur : 1;
+    t->start = ticks;
+    t->from = from;
+    t->to = to;
+}
+
+static i32 anim_value(u32 slot) {
+    struct tween *t = &tweens[slot % ANIM_SLOTS];
+    if (!t->used)
+        return 0;
+    u32 elapsed = ticks - t->start;
+    if (elapsed >= t->dur)
+        return t->to;
+    u32 x = elapsed * 1000 / t->dur;
+    i32 e = (i32)ease_apply(t->ease, x);
+    return t->from + (t->to - t->from) * e / 1000;
 }
 
 static u8 rtc(u8 reg) {
@@ -352,11 +439,21 @@ static int parse_hex(const char *s, u32 *out) {
     return 1;
 }
 
-#define ATTR_SQR 0x0B
-#define PCI_ADDR 0xCF8
-#define PCI_DATA 0xCFC
-#define RTL_VENDOR 0x10EC
-#define RTL_DEVICE 0x8139
+static int parse_dec(const char *s, u32 *out) {
+    u32 v = 0;
+    int digits = 0;
+    for (; *s; s++) {
+        if (*s < '0' || *s > '9')
+            return 0;
+        v = v * 10 + (u32)(*s - '0');
+        if (++digits > 4)
+            return 0;
+    }
+    if (!digits)
+        return 0;
+    *out = v;
+    return 1;
+}
 
 static u8 net_slot;
 static u16 net_io;
@@ -368,7 +465,7 @@ static u32 pci_read(u8 slot, u8 off) {
 }
 
 static int rtl_probe(void) {
-    for (u8 slot = 0; slot < 32; slot++) {
+    for (u8 slot = 0; slot < PCI_SLOT_MAX; slot++) {
         u32 id = pci_read(slot, 0x00);
         if ((id & 0xFFFFu) == RTL_VENDOR && (id >> 16) == RTL_DEVICE) {
             net_slot = slot;
@@ -388,7 +485,8 @@ static int rtl_init(void) {
     net_io = (u16)(pci_read(net_slot, 0x10) & 0xFFFCu);
     outb((u16)(net_io + 0x52), 0x00);
     outb((u16)(net_io + 0x37), 0x10);
-    for (u32 i = 0; i < 1000000 && (inb((u16)(net_io + 0x37)) & 0x10); i++) { }
+    for (u32 i = 0; i < 1000000 && (inb((u16)(net_io + 0x37)) & 0x10); i++)
+        ;
     if (inb((u16)(net_io + 0x37)) & 0x10)
         return 0;
     for (int i = 0; i < 6; i++)
@@ -408,33 +506,11 @@ static void put_mac(const u8 *mac) {
     }
 }
 
-static int parse_dec(const char *s, u32 *out) {
-    u32 v = 0;
-    int digits = 0;
-    for (; *s; s++) {
-        if (*s < '0' || *s > '9')
-            return 0;
-        v = v * 10 + (u32)(*s - '0');
-        if (++digits > 4)
-            return 0;
-    }
-    if (!digits)
-        return 0;
-    *out = v;
-    return 1;
-}
-
 static void draw_sqr(u32 x, u32 y) {
     u16 cell = (u16)(0xDB | (ATTR_SQR << 8));
     for (u32 dy = 0; dy < 2; dy++)
         for (u32 dx = 0; dx < 2; dx++)
             VGA_MEM[(y + dy) * VGA_COLS + x + dx] = cell;
-}
-
-static void wait_ticks(u32 n) {
-    u32 start = ticks;
-    while (ticks - start < n)
-        halt();
 }
 
 static int slen(const char *s) {
@@ -490,6 +566,58 @@ static void boot_splash(void) {
         }
 }
 
+struct saved_regs {
+    u32 edi, esi, ebp, esp_unused, ebx, edx, ecx, eax;
+};
+
+void syscall_dispatch(struct saved_regs *r) {
+    switch (r->eax) {
+    case SYS_PUTC:
+        putc((char)r->ebx);
+        break;
+    case SYS_PUTAT:
+        if (r->ebx < VGA_ROWS && r->ecx < VGA_COLS)
+            VGA_MEM[r->ebx * VGA_COLS + r->ecx] = (u16)r->edx;
+        break;
+    case SYS_CLEAR:
+        clear_screen();
+        break;
+    case SYS_TICKS:
+        r->eax = ticks;
+        break;
+    case SYS_SLEEP:
+        wait_ticks(r->ebx);
+        break;
+    case SYS_TONE:
+        sound_tone(r->ebx, r->ecx);
+        break;
+    case SYS_ANIM_START:
+        anim_start(r->ebx & 0xFF, (u8)((r->ebx >> 8) & 0xFF), (r->ebx >> 16) & 0xFFFF,
+                   (i32)r->ecx, (i32)r->edx);
+        break;
+    case SYS_ANIM_VALUE:
+        r->eax = (u32)anim_value(r->ebx);
+        break;
+    case SYS_GETKEY:
+        r->eax = (u32)kbd_read();
+        break;
+    case SYS_PRINT:
+        puts((const char *)r->ebx);
+        break;
+    default:
+        r->eax = (u32)-1;
+        break;
+    }
+}
+
+static int run_app(void) {
+    const u32 *head = (const u32 *)TX_APP_BASE;
+    if (head[0] != TX_APP_MAGIC)
+        return 0;
+    ((void (*)(void))head[1])();
+    return 1;
+}
+
 static void run_command(char *input) {
     char *argv[8];
     int argc = split(input, argv, 8);
@@ -508,6 +636,8 @@ static void run_command(char *input) {
         puts("  reboot         reset through the keyboard controller\n");
         puts("  net            show the RTL8139 network card and its MAC\n");
         puts("  sqr X Y        draw a 2x2 square at column X, row Y\n");
+        puts("  beep HZ MS     play a tone on the PC speaker\n");
+        puts("  run            run the intro app again\n");
     } else if (str_eq(argv[0], "clear")) {
         clear_screen();
     } else if (str_eq(argv[0], "echo")) {
@@ -577,6 +707,23 @@ static void run_command(char *input) {
         putc(' ');
         put_dec(y);
         putc('\n');
+    } else if (str_eq(argv[0], "beep")) {
+        u32 hz, ms;
+        if (argc < 3 || !parse_dec(argv[1], &hz) || !parse_dec(argv[2], &ms) ||
+            hz < 20 || hz > 20000) {
+            say_error("usage: beep HZ MS   (e.g. beep 523 200)\n");
+            return;
+        }
+        puts("beep ");
+        put_dec(hz);
+        puts(" Hz\n");
+        sound_tone(hz, ms);
+    } else if (str_eq(argv[0], "run")) {
+        if (!run_app()) {
+            say_error("no app installed\n");
+            return;
+        }
+        clear_screen();
     } else {
         say_error("unknown command: ");
         puts(argv[0]);
@@ -601,12 +748,13 @@ void kmain(void) {
     pit_init();
     irq_on();
     boot_splash();
+    run_app();
     clear_screen();
 
     cur_attr = ATTR_OK;
-    puts("Textile OS 0.2 kernel\n");
+    puts("Textile OS 0.3 kernel\n");
     cur_attr = ATTR_TEXT;
-    puts("Keyboard, timer, clock and I/O ports are live. Type help.\n");
+    puts("Keyboard, timer, clock, speaker, animation and I/O ports are live. Type help.\n");
     puts("textile> ");
 
     for (;;) {

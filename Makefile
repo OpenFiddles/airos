@@ -21,7 +21,7 @@ $(BUILD)/entry.o: kernel/entry.asm | $(BUILD)
 $(BUILD)/isr.o: kernel/isr.asm | $(BUILD)
 	$(AS) -f elf32 $< -o $@
 
-$(BUILD)/kernel.o: kernel/kernel.c | $(BUILD)
+$(BUILD)/kernel.o: kernel/kernel.c include/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/kernel.elf: $(OBJS) kernel/link.ld
@@ -29,11 +29,25 @@ $(BUILD)/kernel.elf: $(OBJS) kernel/link.ld
 
 $(BUILD)/kernel.bin: $(BUILD)/kernel.elf
 	$(OBJCOPY) -O binary $< $@
-	test `stat -c %s $@` -le 32768
-	truncate -s 32768 $@
+	test `stat -c %s $@` -le 49152
+	truncate -s 49152 $@
 
-$(BUILD)/textile.img: $(BUILD)/stage1.bin $(BUILD)/kernel.bin
-	cat $(BUILD)/stage1.bin $(BUILD)/kernel.bin > $@
+$(BUILD)/app.o: app/app.c include/textile.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/rt.o: app/rt.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/app.elf: $(BUILD)/app.o $(BUILD)/rt.o app/app.ld
+	$(LD) -m elf_i386 -nostdlib -T app/app.ld -o $@ $(BUILD)/app.o $(BUILD)/rt.o
+
+$(BUILD)/app.bin: $(BUILD)/app.elf
+	$(OBJCOPY) -O binary $< $@
+	test `stat -c %s $@` -le 4096
+	truncate -s 4096 $@
+
+$(BUILD)/textile.img: $(BUILD)/stage1.bin $(BUILD)/kernel.bin $(BUILD)/app.bin
+	cat $(BUILD)/stage1.bin $(BUILD)/kernel.bin $(BUILD)/app.bin > $@
 	truncate -s 1474560 $@
 
 run: $(BUILD)/textile.img

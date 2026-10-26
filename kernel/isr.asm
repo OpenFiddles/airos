@@ -3,9 +3,11 @@ section .text
 global isr_timer
 global isr_keyboard
 global isr_fault
+global isr_syscall
 extern timer_irq
 extern keyboard_irq
 extern cpu_fault
+extern syscall_dispatch
 
 isr_timer:
     pushad
@@ -25,3 +27,11 @@ isr_fault:
 .halt:
     hlt
     jmp .halt
+
+isr_syscall:
+    pushad
+    push esp
+    call syscall_dispatch
+    add esp, 4
+    popad
+    iretd
