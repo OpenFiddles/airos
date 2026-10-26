@@ -65,6 +65,9 @@ void *memcpy(void *dst, const void *src, u32 n) {
 
 static int cur_row, cur_col;
 static u8 cur_attr = ATTR_TEXT;
+u32 cursor_x = 10;
+u32 cursor_y = 10;
+
 
 static void serial_init(void) {
     outb(COM1 + 1, 0x00);
