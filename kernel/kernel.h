@@ -32,11 +32,14 @@ extern u8 cur_attr;
 extern u16 net_io;
 extern u8 net_mac[6];
 
+/* --- Universal Mouse Tracking System Globals --- */
+extern u32 cursor_x;
+extern u32 cursor_y;
+
 /* System Call Parameter Mapping */
 struct saved_regs {
     u32 edi, esi, ebp, esp_unused, ebx, edx, ecx, eax;
 };
-
 
 enum driver_type {
     DRV_TYPE_UNKNOWN = 0,
@@ -53,7 +56,6 @@ struct driver {
     int (*init)(void);
     void (*shutdown)(void);
 };
-
 
 /* Assembly ISR Mapped Functions */
 void isr_timer(void);
@@ -118,5 +120,11 @@ int kbd_read(void);
 /* Exported Driver Manager Functions */
 int driver_register(struct driver *drv);
 int drivers_init_all(void);
-#endif
 
+/* --- New Universal Mouse & Cursor Framework Interfaces --- */
+void cursor_move(i32 delta_x, i32 delta_y);
+void cursor_driver_bootstrap(void);
+void mouse_bootstrap(void);
+void mouse_irq_handler(void);
+
+#endif

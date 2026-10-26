@@ -1,10 +1,11 @@
-; Stage 1 boot sector: loads the kernel (LBA 1..96) to 0x10000 and the app (LBA 97..104)
-; to 0x20000, then enters 32-bit protected mode and jumps to the kernel entry.
+; Stage 1 boot sector: loads Stage 2 (LBA 1..4) to 0x0000:0x9000,
+; the kernel (LBA 5..100) to 0x10000, and the app (LBA 101..108) to 0x20000.
 [BITS 16]
 [ORG 0x7C00]
 
+STAGE2_SECTORS equ 4
 KERNEL_SECTORS equ 96
-APP_SECTORS equ 8
+APP_SECTORS    equ 8
 
 start:
     cli
@@ -19,25 +20,31 @@ start:
     mov si, msg_loading
     call print16
 
-    mov ax, 0x1000
+    ; Load Stage 2 to 0x0000:0x9000
+    xor ax, ax
     mov es, ax
     mov word [lba], 1
+    mov word [offset], 0x9000
+    mov word [remaining], STAGE2_SECTORS
+    call load_range
+
+    ; Load Kernel to 0x1000:0x0000 (Physical 0x10000)
+    mov ax, 0x1000
+    mov es, ax
     mov word [offset], 0
     mov word [remaining], KERNEL_SECTORS
     call load_range
 
+    ; Load App to 0x2000:0x0000 (Physical 0x20000)
     mov ax, 0x2000
     mov es, ax
     mov word [offset], 0
     mov word [remaining], APP_SECTORS
     call load_range
 
-    cli
-    lgdt [gdt_descriptor]
-    mov eax, cr0
-    or eax, 1
-    mov cr0, eax
-    jmp dword 0x08:protected_entry
+    ; Pass boot drive to Stage 2 in DL and jump
+    mov dl, [boot_drive]
+    jmp 0x0000:0x9000
 
 load_range:
 .load:
@@ -61,7 +68,14 @@ load_range:
     mov ax, 0x0201
     int 0x13
     jc disk_error
+    
+    ; Handle segment overflow checks safely
     add word [offset], 512
+    jnz .no_carry
+    mov ax, es
+    add ax, 0x1000
+    mov es, ax
+.no_carry:
     inc word [lba]
     dec word [remaining]
     jmp .load
@@ -86,18 +100,6 @@ print16:
 .done:
     ret
 
-[BITS 32]
-protected_entry:
-    mov ax, 0x10
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    mov ss, ax
-    mov esp, 0x90000
-    mov eax, 0x10000
-    jmp eax
-
 boot_drive  db 0
 lba         dw 0
 offset      dw 0
@@ -105,19 +107,6 @@ remaining   dw 0
 track       db 0
 msg_loading db "Loading AirOS...", 13, 10, 0
 msg_disk    db "Disk read error", 13, 10, 0
-
-gdt_start:
-    dq 0
-gdt_code:
-    dw 0xFFFF, 0x0000
-    db 0x00, 10011010b, 11001111b, 0x00
-gdt_data:
-    dw 0xFFFF, 0x0000
-    db 0x00, 10010010b, 11001111b, 0x00
-gdt_end:
-gdt_descriptor:
-    dw gdt_end - gdt_start - 1
-    dd gdt_start
 
 times 510 - ($ - $$) db 0
 dw 0xAA55

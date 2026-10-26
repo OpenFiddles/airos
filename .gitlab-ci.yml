@@ -1,5 +1,11 @@
 image: node:22-bookworm
 
+# Speeds up subsequent runs by storing the npm cache across pipeline steps
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .npm/
+
 pages:
   stage: deploy
   rules:
@@ -11,7 +17,10 @@ pages:
     - mkdir -p public/v86 /tmp/v86
     - cp web/index.html public/index.html
     - cp build/textile.img public/textile.img
-    - (cd /tmp/v86 && npm install --no-audit --no-fund v86@0.5.472 > /dev/null)
+    
+    # Leverages local caching and turns off unnecessary logs completely
+    - (cd /tmp/v86 && npm install --no-audit --no-fund --cache $CI_PROJECT_DIR/.npm v86@0.5.472 > /dev/null)
+    
     - cp /tmp/v86/node_modules/v86/build/libv86.js /tmp/v86/node_modules/v86/build/v86.wasm public/v86/
     - cp /usr/share/seabios/bios-256k.bin public/v86/seabios.bin
     - cp /usr/share/seabios/vgabios-stdvga.bin public/v86/vgabios.bin

@@ -12,7 +12,7 @@
   p { margin: 6px 0 12px; color: #b5b5b5; }
   #screen { background: #000; border-radius: 6px; padding: 8px; overflow-x: auto; }
   #screen_container { white-space: pre; font: 14px/14px monospace; color: #ddd; }
-  #screen_container canvas { display: block; max-width: 100%; }
+  #screen_container canvas { display: block; max-width: 100%; cursor: crosshair; }
   .status { font-size: .9rem; color: #9aa; min-height: 1.5em; }
   button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid #444; background: #1c1d21; color: #eee; min-height: 44px; }
   button:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
@@ -26,30 +26,42 @@
   <div id='screen'><div id='screen_container'><div></div><canvas></canvas></div></div>
   <p class='status' id='status'>Loading the emulator...</p>
   <p><button id='reset' type='button' disabled>Restart the OS</button></p>
-  <p>Try: <code>help</code>, <code>time</code>, <code>uptime</code>, <code>in 60</code>, <code>echo hello</code>.</p>
+  <p>Try: <code>help</code>, <code>time</code>, <code>uptime</code>, <code>in 60</code>, <code>echo hello</code>, <code>mouse 15 10</code>, <code>beep 440 200</code>.</p>
   <p>Source: <a href='https://gitlab.com/openfiddles/airos'>gitlab.com/openfiddles/airos</a></p>
 </main>
 <script src='v86/libv86.js'></script>
 <script>
   const status = document.getElementById('status');
   const reset = document.getElementById('reset');
+  const screenContainer = document.getElementById('screen_container');
+
   const emulator = new V86({
     wasm_path: 'v86/v86.wasm',
     memory_size: 32 * 1024 * 1024,
     vga_memory_size: 2 * 1024 * 1024,
-    screen_container: document.getElementById('screen_container'),
+    screen_container: screenContainer,
     bios: { url: 'v86/seabios.bin' },
     vga_bios: { url: 'v86/vgabios.bin' },
     fda: { url: 'textile.img', size: 1474560 },
     autostart: true,
   });
+
   emulator.add_listener('emulator-ready', () => {
     status.textContent = 'Booting AirOS...';
     reset.disabled = false;
   });
+
   emulator.add_listener('emulator-started', () => {
     status.textContent = 'Running. Click the screen and type.';
   });
+
+  // Automatically captures browser pointer locks to stream physical coordinates inside the sandbox
+  screenContainer.addEventListener('click', () => {
+    if (emulator.is_running()) {
+      emulator.mouse_set_status(true);
+    }
+  });
+
   reset.addEventListener('click', () => emulator.restart());
   window.addEventListener('error', (e) => {
     status.textContent = 'The emulator failed to load: ' + e.message;

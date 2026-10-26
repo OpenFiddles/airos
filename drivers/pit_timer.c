@@ -22,17 +22,20 @@ static int pit_driver_init(void) {
     return 1; // Return status success
 }
 
-void timer_irq(void) {
+// Change your raw IRQ to a standard C callback that your main IDT caller triggers
+void timer_handler_callback(void) {
     ticks++;
-    outb(0x20, 0x20); // Send EOI
+    outb(0x20, 0x20); // Send End of Interrupt (EOI) to Master PIC
 }
 
 void wait_ticks(u32 n) {
     u32 start = ticks;
-    while (ticks - start < n) {
-        halt();
+    // Safe rollover-resistant timing loop
+    while ((ticks - start) < n) {
+        __asm__ volatile("hlt"); // Direct CPU halt until next timer tick
     }
 }
+
 
 /* Automatically hook into registry layout during startup compilation */
 void pit_driver_bootstrap(void) {
