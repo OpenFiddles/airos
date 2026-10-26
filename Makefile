@@ -29,8 +29,8 @@ $(BUILD)/kernel.elf: $(OBJS) kernel/link.ld
 
 $(BUILD)/kernel.bin: $(BUILD)/kernel.elf
 	$(OBJCOPY) -O binary $< $@
-	test `stat -c %s $@` -le 16384
-	truncate -s 16384 $@
+	test `stat -c %s $@` -le 32768
+	truncate -s 32768 $@
 
 $(BUILD)/textile.img: $(BUILD)/stage1.bin $(BUILD)/kernel.bin
 	cat $(BUILD)/stage1.bin $(BUILD)/kernel.bin > $@

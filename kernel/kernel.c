@@ -23,6 +23,14 @@ static inline u8 inb(u16 port) {
 }
 
 static inline void io_wait(void) { outb(0x80, 0); }
+static inline void outl(u16 port, u32 value) {
+    __asm__ volatile ("outl %0, %1" : : "a"(value), "Nd"(port));
+}
+static inline u32 inl(u16 port) {
+    u32 value;
+    __asm__ volatile ("inl %1, %0" : "=a"(value) : "Nd"(port));
+    return value;
+}
 static inline void irq_on(void) { __asm__ volatile ("sti"); }
 static inline void irq_off(void) { __asm__ volatile ("cli"); }
 static inline void halt(void) { __asm__ volatile ("hlt"); }
@@ -344,6 +352,144 @@ static int parse_hex(const char *s, u32 *out) {
     return 1;
 }
 
+#define ATTR_SQR 0x0B
+#define PCI_ADDR 0xCF8
+#define PCI_DATA 0xCFC
+#define RTL_VENDOR 0x10EC
+#define RTL_DEVICE 0x8139
+
+static u8 net_slot;
+static u16 net_io;
+static u8 net_mac[6];
+
+static u32 pci_read(u8 slot, u8 off) {
+    outl(PCI_ADDR, 0x80000000u | ((u32)slot << 11) | (off & 0xFCu));
+    return inl(PCI_DATA);
+}
+
+static int rtl_probe(void) {
+    for (u8 slot = 0; slot < 32; slot++) {
+        u32 id = pci_read(slot, 0x00);
+        if ((id & 0xFFFFu) == RTL_VENDOR && (id >> 16) == RTL_DEVICE) {
+            net_slot = slot;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int rtl_init(void) {
+    u32 cmd;
+    if (!rtl_probe())
+        return 0;
+    outl(PCI_ADDR, 0x80000000u | ((u32)net_slot << 11) | 0x04u);
+    cmd = inl(PCI_DATA);
+    outl(PCI_DATA, (cmd & 0x0000FFFFu) | 0x05u);
+    net_io = (u16)(pci_read(net_slot, 0x10) & 0xFFFCu);
+    outb((u16)(net_io + 0x52), 0x00);
+    outb((u16)(net_io + 0x37), 0x10);
+    for (u32 i = 0; i < 1000000 && (inb((u16)(net_io + 0x37)) & 0x10); i++) { }
+    if (inb((u16)(net_io + 0x37)) & 0x10)
+        return 0;
+    for (int i = 0; i < 6; i++)
+        net_mac[i] = inb((u16)(net_io + i));
+    return 1;
+}
+
+static int rtl_link_up(void) {
+    return !(inb((u16)(net_io + 0x58)) & 0x04);
+}
+
+static void put_mac(const u8 *mac) {
+    for (int i = 0; i < 6; i++) {
+        put_hexn(mac[i], 2);
+        if (i < 5)
+            putc(':');
+    }
+}
+
+static int parse_dec(const char *s, u32 *out) {
+    u32 v = 0;
+    int digits = 0;
+    for (; *s; s++) {
+        if (*s < '0' || *s > '9')
+            return 0;
+        v = v * 10 + (u32)(*s - '0');
+        if (++digits > 4)
+            return 0;
+    }
+    if (!digits)
+        return 0;
+    *out = v;
+    return 1;
+}
+
+static void draw_sqr(u32 x, u32 y) {
+    u16 cell = (u16)(0xDB | (ATTR_SQR << 8));
+    for (u32 dy = 0; dy < 2; dy++)
+        for (u32 dx = 0; dx < 2; dx++)
+            VGA_MEM[(y + dy) * VGA_COLS + x + dx] = cell;
+}
+
+static void wait_ticks(u32 n) {
+    u32 start = ticks;
+    while (ticks - start < n)
+        halt();
+}
+
+static int slen(const char *s) {
+    int n = 0;
+    while (s[n])
+        n++;
+    return n;
+}
+
+static const char *const saturn[5] = {
+    "   PPPPPPPPPP   ",
+    " PPPPPPPPPPPPPP ",
+    "=========BBBBBBBBBBBBBB=========",
+    " PPPPPPPPPPPPPP ",
+    "   PPPPPPPPPP   "
+};
+
+static void splash_cell(int row, int col, u8 glyph, u8 fg, u8 bg) {
+    VGA_MEM[row * VGA_COLS + col] = (u16)(glyph | (((bg << 4) | fg) << 8));
+}
+
+static void splash_text(int row, const char *s, u8 fg, u8 bg) {
+    int len = slen(s), col = (VGA_COLS - len) / 2;
+    for (int i = 0; i < len; i++)
+        splash_cell(row, col + i, (u8)s[i], fg, bg);
+}
+
+static void splash_frame(u8 bg) {
+    for (int i = 0; i < VGA_COLS * VGA_ROWS; i++)
+        VGA_MEM[i] = (u16)(' ' | (bg << 12));
+    for (int r = 0; r < 5; r++) {
+        int len = slen(saturn[r]), col0 = (VGA_COLS - len) / 2;
+        for (int i = 0; i < len; i++) {
+            char c = saturn[r][i];
+            if (c == 'P')
+                splash_cell(7 + r, col0 + i, 0xDB, 0x0E, bg);
+            else if (c == 'B')
+                splash_cell(7 + r, col0 + i, 0xB2, 0x06, bg);
+            else if (c == '=')
+                splash_cell(7 + r, col0 + i, 0xCD, 0x0B, bg);
+        }
+    }
+    splash_text(14, "OpenFiddles", 0x0F, bg);
+    splash_text(16, "Textile OS", 0x07, bg);
+}
+
+static void boot_splash(void) {
+    static const u8 pulse[12] = {0, 0, 1, 1, 1, 3, 3, 3, 1, 1, 0, 0};
+    for (int cycle = 0; cycle < 4; cycle++)
+        for (int f = 0; f < 12; f++) {
+            splash_frame(pulse[f]);
+            wait_ticks(5);
+        }
+}
+
 static void run_command(char *input) {
     char *argv[8];
     int argc = split(input, argv, 8);
@@ -360,6 +506,8 @@ static void run_command(char *input) {
         puts("  in PORT        read one byte from an I/O port, e.g. in 60\n");
         puts("  out PORT VAL   write one byte to an I/O port, e.g. out 80 0\n");
         puts("  reboot         reset through the keyboard controller\n");
+        puts("  net            show the RTL8139 network card and its MAC\n");
+        puts("  sqr X Y        draw a 2x2 square at column X, row Y\n");
     } else if (str_eq(argv[0], "clear")) {
         clear_screen();
     } else if (str_eq(argv[0], "echo")) {
@@ -406,6 +554,29 @@ static void run_command(char *input) {
         outb(0x64, 0xFE);
         for (;;)
             halt();
+    } else if (str_eq(argv[0], "net")) {
+        if (!rtl_init()) {
+            say_error("no RTL8139 network card found\n");
+        } else {
+            puts("rtl8139 at io 0x");
+            put_hexn(net_io, 4);
+            puts("  mac ");
+            put_mac(net_mac);
+            puts(rtl_link_up() ? "  link up\n" : "  link down\n");
+        }
+    } else if (str_eq(argv[0], "sqr")) {
+        u32 x, y;
+        if (argc < 3 || !parse_dec(argv[1], &x) || !parse_dec(argv[2], &y) ||
+            x > VGA_COLS - 2 || y > VGA_ROWS - 2) {
+            say_error("usage: sqr X Y   (X 0-78, Y 0-23)\n");
+            return;
+        }
+        draw_sqr(x, y);
+        puts("square at ");
+        put_dec(x);
+        putc(' ');
+        put_dec(y);
+        putc('\n');
     } else {
         say_error("unknown command: ");
         puts(argv[0]);
@@ -429,6 +600,8 @@ void kmain(void) {
     pic_init();
     pit_init();
     irq_on();
+    boot_splash();
+    clear_screen();
 
     cur_attr = ATTR_OK;
     puts("Textile OS 0.2 kernel\n");

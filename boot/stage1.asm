@@ -1,9 +1,9 @@
-; Stage 1 boot sector: loads the kernel (floppy LBA 1..32) to 0x1000,
+; Stage 1 boot sector: loads the kernel (floppy LBA 1..64) to 0x10000,
 ; then enters 32-bit protected mode and jumps to the kernel entry.
 [BITS 16]
 [ORG 0x7C00]
 
-KERNEL_SECTORS equ 32
+KERNEL_SECTORS equ 64
 
 start:
     cli
@@ -18,7 +18,7 @@ start:
     mov si, msg_loading
     call print16
 
-    mov ax, 0x0100
+    mov ax, 0x1000
     mov es, ax
     mov word [lba], 1
     mov word [offset], 0
@@ -81,7 +81,7 @@ protected_entry:
     mov gs, ax
     mov ss, ax
     mov esp, 0x90000
-    mov eax, 0x1000
+    mov eax, 0x10000
     jmp eax
 
 boot_drive  db 0
