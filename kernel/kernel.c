@@ -65,8 +65,6 @@ void *memcpy(void *dst, const void *src, u32 n) {
 
 static int cur_row, cur_col;
 static u8 cur_attr = ATTR_TEXT;
-u32 cursor_x = 10;
-u32 cursor_y = 10;
 
 
 static void serial_init(void) {
@@ -115,7 +113,7 @@ static void newline(void) {
         scroll_up();
 }
 
-static void putc(char c) {
+void putc(char c) {
     serial_putc(c);
     if (c == '\n') {
         newline();
@@ -132,12 +130,12 @@ static void putc(char c) {
     update_cursor();
 }
 
-static void puts(const char *s) {
+void puts(const char *s) {
     while (*s)
         putc(*s++);
 }
 
-static void put_hexn(u32 value, int digits) {
+void put_hexn(u32 value, int digits) {
     static const char hex[] = "0123456789ABCDEF";
     for (int i = digits - 1; i >= 0; i--)
         putc(hex[(value >> (i * 4)) & 0xF]);
@@ -154,7 +152,7 @@ static void put_dec(u32 value) {
         putc(buf[--n]);
 }
 
-static void say_error(const char *s) {
+void say_error(const char *s) {
     u8 old = cur_attr;
     cur_attr = ATTR_ERR;
     puts(s);
@@ -251,32 +249,6 @@ static const char kmap_shift[0x3A] = {
 static volatile u8 kbuf[256];
 static volatile u8 kbuf_head, kbuf_tail;
 static volatile u8 shift_down;
-
-void keyboard_irq(void) {
-    u8 sc = inb(0x60);
-    outb(0x20, 0x20);
-
-    if (sc == 0x2A || sc == 0x36) {
-        shift_down = 1;
-        return;
-    }
-    if (sc == 0xAA || sc == 0xB6) {
-        shift_down = 0;
-        return;
-    }
-    if ((sc & 0x80) || sc >= 0x3A)
-        return;
-
-    char c = shift_down ? kmap_shift[sc] : kmap[sc];
-    if (!c)
-        return;
-
-    u8 next = (u8)(kbuf_head + 1);
-    if (next == kbuf_tail)
-        return;
-    kbuf[kbuf_head] = (u8)c;
-    kbuf_head = next;
-}
 
 static int kbd_read(void) {
     int c = -1;
@@ -732,12 +704,6 @@ static void run_command(char *input) {
         puts(argv[0]);
         putc('\n');
     }
-}
-
-void cpu_fault(void) {
-    say_error("\nCPU exception. The kernel stopped.\n");
-    for (;;)
-        halt();
 }
 
 void kmain(void) {
