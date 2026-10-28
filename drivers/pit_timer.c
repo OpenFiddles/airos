@@ -28,15 +28,6 @@ void timer_handler_callback(void) {
     outb(0x20, 0x20); // Send End of Interrupt (EOI) to Master PIC
 }
 
-void wait_ticks(u32 n) {
-    u32 start = ticks;
-    // Safe rollover-resistant timing loop
-    while ((ticks - start) < n) {
-        __asm__ volatile("hlt"); // Direct CPU halt until next timer tick
-    }
-}
-
-
 /* Automatically hook into registry layout during startup compilation */
 void pit_driver_bootstrap(void) {
     driver_register(&pit_driver);

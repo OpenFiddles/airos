@@ -1,63 +1,94 @@
 #include "../kernel/kernel.h"
 
-static int ps2_mouse_init(void);
+#define MOUSE_SUB 4
+#define MOUSE_MAX_X (VGA_COLS * MOUSE_SUB - 1)
+#define MOUSE_MAX_Y (VGA_ROWS * MOUSE_SUB - 1)
+#define PS2_TRIES 100000
 
-static struct driver mouse_hardware_driver = {
-    .name = "PS/2 Intel Mouse Core",
-    .type = DRV_TYPE_UNKNOWN, 
-    .init = ps2_mouse_init,
-    .shutdown = 0
-};
+volatile u8 mouse_buttons;
+static u8 packet[3];
+static u8 phase;
+static i32 sub_x = 10 * MOUSE_SUB;
+static i32 sub_y = 10 * MOUSE_SUB;
 
-/* Core helper functions to talk to the keyboard/mouse controller ports */
-static inline void mouse_wait_write(void) {
-    while ((inb(0x64) & 2) != 0); // Wait until input buffer is clear
+static int ctl_wait_write(void) {
+    for (u32 i = 0; i < PS2_TRIES; i++)
+        if (!(inb(0x64) & 0x02))
+            return 1;
+    return 0;
 }
 
-static inline void mouse_wait_read(void) {
-    while ((inb(0x64) & 1) == 0); // Wait until data is ready to be read
+static int ctl_wait_read(void) {
+    for (u32 i = 0; i < PS2_TRIES; i++)
+        if (inb(0x64) & 0x01)
+            return 1;
+    return 0;
 }
 
-static inline void mouse_write_command(u8 command) {
-    mouse_wait_write();
-    outb(0x64, 0xD4); // Tell controller to route next byte straight to auxiliary mouse device
-    mouse_wait_write();
-    outb(0x60, command);
+static int mouse_send(u8 cmd) {
+    if (!ctl_wait_write())
+        return 0;
+    outb(0x64, 0xD4);
+    if (!ctl_wait_write())
+        return 0;
+    outb(0x60, cmd);
+    if (!ctl_wait_read())
+        return 0;
+    return inb(0x60) == 0xFA;
 }
 
-static inline u8 mouse_read_data(void) {
-    mouse_wait_read();
-    return inb(0x60);
-}
-
-/* Kicks off physical configuration sequencing */
-static int ps2_mouse_init(void) {
-    u8 status;
-
-    // 1. Enable Auxiliary Mouse Device on controller
-    mouse_wait_write();
+int mouse_init(void) {
+    u8 cfg;
+    if (!ctl_wait_write())
+        return 0;
     outb(0x64, 0xA8);
-
-    // 2. Enable Mouse Interrupts (IRQ 12) by editing the controller configuration byte
-    mouse_wait_write();
-    outb(0x64, 0x20); // Command: Read Compack Status Byte
-    mouse_wait_read();
-    status = (inb(0x60) | 2); // Set bit 1 to unmask IRQ 12
-    mouse_wait_write();
-    outb(0x64, 0x60); // Command: Write Compack Status Byte
-    mouse_wait_write();
-    outb(0x60, status);
-
-    // 3. Set default resolution and sampling scales on raw mouse firmware
-    mouse_write_command(0xF6); // Set default device defaults
-    mouse_read_data();         // Read ACK response packet block
-
-    mouse_write_command(0xF4); // Enable packet streaming stream mode
-    mouse_read_data();         // Read final ACK vector block
-
-    return 1; // Device driver armed and loaded successfully
+    if (!ctl_wait_write())
+        return 0;
+    outb(0x64, 0x20);
+    if (!ctl_wait_read())
+        return 0;
+    cfg = inb(0x60);
+    cfg |= 0x02;
+    cfg &= (u8)~0x20;
+    if (!ctl_wait_write())
+        return 0;
+    outb(0x64, 0x60);
+    if (!ctl_wait_write())
+        return 0;
+    outb(0x60, cfg);
+    if (!mouse_send(0xF6))
+        return 0;
+    if (!mouse_send(0xF4))
+        return 0;
+    phase = 0;
+    return 1;
 }
 
-void mouse_bootstrap(void) {
-    driver_register(&mouse_hardware_driver);
+void mouse_irq_handler(void) {
+    u8 status = inb(0x64);
+    u8 b;
+    if (!(status & 0x20))
+        return;
+    b = inb(0x60);
+    if (phase == 0 && !(b & 0x08))
+        return;
+    packet[phase++] = b;
+    if (phase < 3)
+        return;
+    phase = 0;
+    i32 dx = (i32)packet[1] - (i32)((packet[0] << 4) & 0x100);
+    i32 dy = (i32)packet[2] - (i32)((packet[0] << 3) & 0x100);
+    mouse_buttons = packet[0] & 0x07;
+    sub_x += dx;
+    sub_y -= dy;
+    if (sub_x < 0)
+        sub_x = 0;
+    if (sub_x > MOUSE_MAX_X)
+        sub_x = MOUSE_MAX_X;
+    if (sub_y < 0)
+        sub_y = 0;
+    if (sub_y > MOUSE_MAX_Y)
+        sub_y = MOUSE_MAX_Y;
+    cursor_x = (u32)(sub_x / MOUSE_SUB);
+    cursor_y = (u32)(sub_y / MOUSE_SUB);
 }

@@ -11,6 +11,7 @@ CFLAGS = -m32 -std=gnu99 -ffreestanding -fno-pic -fno-stack-protector -fno-built
 OBJS = $(BUILD)/entry.o \
        $(BUILD)/isr.o \
        $(BUILD)/usermode.o \
+       $(BUILD)/desktop.o \
        $(BUILD)/kernel.o \
        $(BUILD)/drivers.o \
        $(BUILD)/keyboard.o \
@@ -44,6 +45,9 @@ $(BUILD)/usermode.o: kernel/usermode.asm | $(BUILD)
 	$(AS) -f elf32 $< -o $@
 
 # --- Kernel Core C Objects ---
+$(BUILD)/desktop.o: kernel/desktop.c kernel/kernel.h include/textile.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/kernel.o: kernel/kernel.c kernel/kernel.h include/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 

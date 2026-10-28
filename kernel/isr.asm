@@ -66,3 +66,16 @@ isr_syscall:
     
     popad
     iretd
+
+global isr_mouse
+extern mouse_irq_handler
+
+isr_mouse:
+    pushad
+    cld
+    call mouse_irq_handler
+    mov al, 0x20
+    out 0xA0, al
+    out 0x20, al
+    popad
+    iretd

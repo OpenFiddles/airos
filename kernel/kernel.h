@@ -137,5 +137,12 @@ void cursor_move(i32 delta_x, i32 delta_y);
 void cursor_driver_bootstrap(void);
 void mouse_bootstrap(void);
 void mouse_irq_handler(void);
+int mouse_init(void);
+extern volatile u8 mouse_buttons;
+void serial_str(const char *s);
+void rtc_now(u8 *out);
+int desktop_run(void);
+void wait_ticks(u32 n);
+void sound_tone(u32 hz, u32 ms);
 
 #endif
