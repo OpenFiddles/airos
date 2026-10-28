@@ -14,6 +14,7 @@
 #define PIANO_KEYS 8
 #define PIANO_FLASH 12
 #define FRAME_TICKS 2
+#define CURSOR_ATTR 0x0F
 
 enum { WIN_HELLO, WIN_PIANO, WIN_CLOCK, WIN_COUNT };
 
@@ -149,6 +150,7 @@ static void draw_content(int k) {
         text(w->y + 3, w->x + 2, "Click an icon on the left", BODY_ATTR, w->w - 4);
         text(w->y + 4, w->x + 2, "or a button on the taskbar.", BODY_ATTR, w->w - 4);
         text(w->y + 6, w->x + 2, "Esc drops to the text shell.", BODY_ATTR, w->w - 4);
+        text(w->y + 7, w->x + 2, "Arrow keys move the pointer.", BODY_ATTR, w->w - 4);
     } else if (k == WIN_PIANO) {
         text(w->y + 2, w->x + 2, "Click or type a s d f g h j k", BODY_ATTR, w->w - 4);
         for (int i = 0; i < PIANO_KEYS; i++) {
@@ -205,11 +207,7 @@ static void draw_taskbar(void) {
 static void draw_cursor(void) {
     i32 r = (i32)cursor_y, c = (i32)cursor_x;
     if (r < 0 || r >= VGA_ROWS || c < 0 || c >= VGA_COLS) return;
-    u16 v = back[r * VGA_COLS + c];
-    u8 ch = (u8)(v & 0xFF);
-    u8 a = (u8)(v >> 8);
-    u8 inv = (u8)(((a & 0x0F) << 4) | ((a >> 4) & 0x0F));
-    back[r * VGA_COLS + c] = (u16)(ch | (inv << 8));
+    back[r * VGA_COLS + c] = (u16)(0xDB | (CURSOR_ATTR << 8));
 }
 
 static void draw_frame(void) {
@@ -291,6 +289,16 @@ int desktop_run(void) {
             handle_key(c);
         }
         if (!running) break;
+        int a;
+        while ((a = kbd_arrow_read()) >= 0) {
+            i32 dx = 0, dy = 0;
+            if (a == ARROW_UP) dy = -1;
+            else if (a == ARROW_DOWN) dy = 1;
+            else if (a == ARROW_LEFT) dx = -1;
+            else dx = 1;
+            cursor_nudge(dx, dy);
+            log_point("desktop: cursor", (i32)cursor_x, (i32)cursor_y);
+        }
         handle_mouse();
         if (piano_flash > 0) piano_flash--;
         draw_frame();
