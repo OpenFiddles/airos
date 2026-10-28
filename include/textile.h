@@ -18,8 +18,16 @@ enum tx_syscall {
     SYS_ANIM_VALUE = 8,
     SYS_GETKEY = 9,
     SYS_PRINT = 10,
-    SYS_EXIT = 11
+    SYS_EXIT = 11,
+    SYS_GETARROW = 12,
+    SYS_CURSOR = 13
 };
+
+/* Arrow codes returned by SYS_GETARROW (-1 when none is waiting). */
+#define ARROW_UP 1
+#define ARROW_DOWN 2
+#define ARROW_LEFT 3
+#define ARROW_RIGHT 4
 
 enum tx_ease { EASE_LINEAR = 0, EASE_OUT_CUBIC = 1, EASE_IN_OUT = 2 };
 

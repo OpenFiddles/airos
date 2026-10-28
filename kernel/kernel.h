@@ -103,7 +103,6 @@ void update_cursor(void);
 void putc(char c);
 void puts(const char *s);
 void put_hexn(u32 value, int digits);
-void put_dec(u32 value);
 void say_error(const char *s);
 
 void idt_init(void);
@@ -144,5 +143,9 @@ void rtc_now(u8 *out);
 int desktop_run(void);
 void wait_ticks(u32 n);
 void sound_tone(u32 hz, u32 ms);
+
+/* Arrow keys and pointer nudging, used by the desktop */
+int kbd_arrow_read(void);
+void cursor_nudge(i32 dx, i32 dy);
 
 #endif

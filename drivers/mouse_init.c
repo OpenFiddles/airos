@@ -92,3 +92,18 @@ void mouse_irq_handler(void) {
     cursor_x = (u32)(sub_x / MOUSE_SUB);
     cursor_y = (u32)(sub_y / MOUSE_SUB);
 }
+
+void cursor_nudge(i32 dx, i32 dy) {
+    sub_x += dx * MOUSE_SUB;
+    sub_y += dy * MOUSE_SUB;
+    if (sub_x < 0)
+        sub_x = 0;
+    if (sub_x > MOUSE_MAX_X)
+        sub_x = MOUSE_MAX_X;
+    if (sub_y < 0)
+        sub_y = 0;
+    if (sub_y > MOUSE_MAX_Y)
+        sub_y = MOUSE_MAX_Y;
+    cursor_x = (u32)(sub_x / MOUSE_SUB);
+    cursor_y = (u32)(sub_y / MOUSE_SUB);
+}
