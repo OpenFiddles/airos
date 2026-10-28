@@ -12,8 +12,15 @@ static u32 sys(u32 n, u32 b, u32 c, u32 d) {
 
 void app_main(void);
 
+static void app_entry(void) {
+    app_main();
+    sys(SYS_EXIT, 0, 0, 0);
+    for (;;)
+        ;
+}
+
 __attribute__((section(".head"), used))
-const u32 app_head[2] = { TX_APP_MAGIC, (u32)(unsigned long)app_main };
+const u32 app_head[2] = { TX_APP_MAGIC, (u32)(unsigned long)app_entry };
 
 static const char title[] = "AirOS...";
 
@@ -33,6 +40,10 @@ static void draw_title(i32 col, u32 attr) {
 
 void app_main(void) {
     sys(SYS_CLEAR, 0, 0, 0);
+
+    u32 cs;
+    __asm__ volatile ("mov %%cs, %0" : "=r"(cs));
+    sys(SYS_PRINT, (u32)((cs & 3) == 3 ? "app: running in ring 3\n" : "app: running in ring 0\n"), 0, 0);
 
     sys(SYS_ANIM_START, 0u | ((u32)EASE_OUT_CUBIC << 8) | (60u << 16), (u32)(-14), 35u);
     for (u32 f = 0; f < 90; f++) {
