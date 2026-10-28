@@ -17,7 +17,8 @@ enum tx_syscall {
     SYS_ANIM_START = 7,
     SYS_ANIM_VALUE = 8,
     SYS_GETKEY = 9,
-    SYS_PRINT = 10
+    SYS_PRINT = 10,
+    SYS_EXIT = 11
 };
 
 enum tx_ease { EASE_LINEAR = 0, EASE_OUT_CUBIC = 1, EASE_IN_OUT = 2 };
