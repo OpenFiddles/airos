@@ -10,6 +10,7 @@ CFLAGS = -m32 -std=gnu99 -ffreestanding -fno-pic -fno-stack-protector -fno-built
 # Expanded to compile all the core kernel files visible in your tree
 OBJS = $(BUILD)/entry.o \
        $(BUILD)/isr.o \
+       $(BUILD)/usermode.o \
        $(BUILD)/kernel.o \
        $(BUILD)/drivers.o \
        $(BUILD)/keyboard.o \
@@ -37,6 +38,9 @@ $(BUILD)/entry.o: kernel/entry.asm | $(BUILD)
 	$(AS) -f elf32 $< -o $@
 
 $(BUILD)/isr.o: kernel/isr.asm | $(BUILD)
+	$(AS) -f elf32 $< -o $@
+
+$(BUILD)/usermode.o: kernel/usermode.asm | $(BUILD)
 	$(AS) -f elf32 $< -o $@
 
 # --- Kernel Core C Objects ---
