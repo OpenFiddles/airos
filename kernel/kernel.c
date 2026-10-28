@@ -194,9 +194,68 @@ static void idt_init(void) {
     idt_set(0x20, isr_timer, 0x8E);
     idt_set(0x21, isr_keyboard, 0x8E);
     /* Trap gate (0x8F) keeps interrupts enabled while a syscall sleeps. */
-    idt_set(0x80, isr_syscall, 0x8F);
+    idt_set(0x80, isr_syscall, 0xEF);
     struct idt_ptr ptr = { (u16)(sizeof(idt) - 1), (u32)idt };
     __asm__ volatile ("lidt %0" : : "m"(ptr));
+}
+
+struct gdt_entry {
+    u16 limit_low;
+    u16 base_low;
+    u8 base_mid;
+    u8 access;
+    u8 gran;
+    u8 base_high;
+} __attribute__((packed));
+
+struct gdt_ptr {
+    u16 limit;
+    u32 base;
+} __attribute__((packed));
+
+struct tss {
+    u32 prev, esp0, ss0, esp1, ss1, esp2, ss2, cr3, eip, eflags;
+    u32 eax, ecx, edx, ebx, esp, ebp, esi, edi;
+    u32 es, cs, ss, ds, fs, gs, ldt;
+    u16 trap, iomap;
+} __attribute__((packed));
+
+#define GDT_KDATA 0x10
+#define USER_STACK_TOP 0x28000u
+
+static struct gdt_entry gdt[6];
+static struct gdt_ptr gdt_desc;
+static struct tss tss_entry;
+static u8 ring0_stack[4096] __attribute__((aligned(16)));
+
+void gdt_flush(u32 ptr);
+void tss_flush(void);
+void enter_user(u32 entry, u32 user_esp);
+void user_leave(void);
+
+static void gdt_set(int i, u32 base, u32 limit, u8 access, u8 gran) {
+    gdt[i].limit_low = (u16)(limit & 0xFFFF);
+    gdt[i].base_low = (u16)(base & 0xFFFF);
+    gdt[i].base_mid = (u8)((base >> 16) & 0xFF);
+    gdt[i].access = access;
+    gdt[i].gran = (u8)(((limit >> 16) & 0x0F) | gran);
+    gdt[i].base_high = (u8)((base >> 24) & 0xFF);
+}
+
+static void gdt_init(void) {
+    gdt_set(0, 0, 0, 0, 0);
+    gdt_set(1, 0, 0xFFFFF, 0x9A, 0xC0);
+    gdt_set(2, 0, 0xFFFFF, 0x92, 0xC0);
+    gdt_set(3, 0, 0xFFFFF, 0xFA, 0xC0);
+    gdt_set(4, 0, 0xFFFFF, 0xF2, 0xC0);
+    tss_entry.ss0 = GDT_KDATA;
+    tss_entry.esp0 = (u32)ring0_stack + sizeof(ring0_stack);
+    tss_entry.iomap = sizeof(tss_entry);
+    gdt_set(5, (u32)&tss_entry, sizeof(tss_entry) - 1, 0x89, 0x00);
+    gdt_desc.limit = sizeof(gdt) - 1;
+    gdt_desc.base = (u32)gdt;
+    gdt_flush((u32)&gdt_desc);
+    tss_flush();
 }
 
 static void pic_init(void) {
@@ -552,6 +611,9 @@ void syscall_dispatch(struct saved_regs *r) {
     case SYS_GETKEY:
         r->eax = (u32)kbd_read();
         break;
+    case SYS_EXIT:
+        user_leave();
+        break;
     case SYS_PRINT:
         puts((const char *)r->ebx);
         break;
@@ -565,7 +627,7 @@ static int run_app(void) {
     const u32 *head = (const u32 *)TX_APP_BASE;
     if (head[0] != TX_APP_MAGIC)
         return 0;
-    ((void (*)(void))head[1])();
+    enter_user(head[1], USER_STACK_TOP);
     return 1;
 }
 
@@ -688,6 +750,7 @@ void kmain(void) {
 
     serial_init();
     clear_screen();
+    gdt_init();
     idt_init();
     pic_init();
     pit_init();
