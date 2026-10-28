@@ -28,9 +28,6 @@ try:
             time.sleep(0.12)
         time.sleep(0.8)
 
-    mon.sendall(b'sendkey esc\n')
-    time.sleep(1.5)
-
     for cmd in ['help', 'time', 'uptime', 'in 60', 'echo hello textile', 'sqr 10 5', 'net',
                 'beep 523 50', 'run']:
         type_line(cmd)

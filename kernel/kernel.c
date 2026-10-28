@@ -66,7 +66,6 @@ void *memcpy(void *dst, const void *src, u32 n) {
 static int cur_row, cur_col;
 static u8 cur_attr = ATTR_TEXT;
 
-
 static void serial_init(void) {
     outb(COM1 + 1, 0x00);
     outb(COM1 + 3, 0x80);
@@ -113,7 +112,7 @@ static void newline(void) {
         scroll_up();
 }
 
-void putc(char c) {
+static void putc(char c) {
     serial_putc(c);
     if (c == '\n') {
         newline();
@@ -130,12 +129,12 @@ void putc(char c) {
     update_cursor();
 }
 
-void puts(const char *s) {
+static void puts(const char *s) {
     while (*s)
         putc(*s++);
 }
 
-void put_hexn(u32 value, int digits) {
+static void put_hexn(u32 value, int digits) {
     static const char hex[] = "0123456789ABCDEF";
     for (int i = digits - 1; i >= 0; i--)
         putc(hex[(value >> (i * 4)) & 0xF]);
@@ -152,7 +151,7 @@ static void put_dec(u32 value) {
         putc(buf[--n]);
 }
 
-void say_error(const char *s) {
+static void say_error(const char *s) {
     u8 old = cur_attr;
     cur_attr = ATTR_ERR;
     puts(s);
@@ -176,9 +175,6 @@ static struct idt_entry idt[256];
 
 void isr_timer(void);
 void isr_keyboard(void);
-void isr_mouse(void);
-int mouse_init(void);
-int desktop_run(void);
 void isr_fault(void);
 void isr_syscall(void);
 
@@ -196,70 +192,10 @@ static void idt_init(void) {
         idt_set(i, isr_fault, 0x8E);
     idt_set(0x20, isr_timer, 0x8E);
     idt_set(0x21, isr_keyboard, 0x8E);
-    idt_set(0x2C, isr_mouse, 0x8E);
     /* Trap gate (0x8F) keeps interrupts enabled while a syscall sleeps. */
-    idt_set(0x80, isr_syscall, 0xEF);
+    idt_set(0x80, isr_syscall, 0x8F);
     struct idt_ptr ptr = { (u16)(sizeof(idt) - 1), (u32)idt };
     __asm__ volatile ("lidt %0" : : "m"(ptr));
-}
-
-struct gdt_entry {
-    u16 limit_low;
-    u16 base_low;
-    u8 base_mid;
-    u8 access;
-    u8 gran;
-    u8 base_high;
-} __attribute__((packed));
-
-struct gdt_ptr {
-    u16 limit;
-    u32 base;
-} __attribute__((packed));
-
-struct tss {
-    u32 prev, esp0, ss0, esp1, ss1, esp2, ss2, cr3, eip, eflags;
-    u32 eax, ecx, edx, ebx, esp, ebp, esi, edi;
-    u32 es, cs, ss, ds, fs, gs, ldt;
-    u16 trap, iomap;
-} __attribute__((packed));
-
-#define GDT_KDATA 0x10
-#define USER_STACK_TOP 0x28000u
-
-static struct gdt_entry gdt[6];
-static struct gdt_ptr gdt_desc;
-static struct tss tss_entry;
-static u8 ring0_stack[4096] __attribute__((aligned(16)));
-
-void gdt_flush(u32 ptr);
-void tss_flush(void);
-void enter_user(u32 entry, u32 user_esp);
-void user_leave(void);
-
-static void gdt_set(int i, u32 base, u32 limit, u8 access, u8 gran) {
-    gdt[i].limit_low = (u16)(limit & 0xFFFF);
-    gdt[i].base_low = (u16)(base & 0xFFFF);
-    gdt[i].base_mid = (u8)((base >> 16) & 0xFF);
-    gdt[i].access = access;
-    gdt[i].gran = (u8)(((limit >> 16) & 0x0F) | gran);
-    gdt[i].base_high = (u8)((base >> 24) & 0xFF);
-}
-
-static void gdt_init(void) {
-    gdt_set(0, 0, 0, 0, 0);
-    gdt_set(1, 0, 0xFFFFF, 0x9A, 0xC0);
-    gdt_set(2, 0, 0xFFFFF, 0x92, 0xC0);
-    gdt_set(3, 0, 0xFFFFF, 0xFA, 0xC0);
-    gdt_set(4, 0, 0xFFFFF, 0xF2, 0xC0);
-    tss_entry.ss0 = GDT_KDATA;
-    tss_entry.esp0 = (u32)ring0_stack + sizeof(ring0_stack);
-    tss_entry.iomap = sizeof(tss_entry);
-    gdt_set(5, (u32)&tss_entry, sizeof(tss_entry) - 1, 0x89, 0x00);
-    gdt_desc.limit = sizeof(gdt) - 1;
-    gdt_desc.base = (u32)gdt;
-    gdt_flush((u32)&gdt_desc);
-    tss_flush();
 }
 
 static void pic_init(void) {
@@ -271,8 +207,8 @@ static void pic_init(void) {
     outb(0xA1, 0x02); io_wait();
     outb(0x21, 0x01); io_wait();
     outb(0xA1, 0x01); io_wait();
-    outb(0x21, 0xF8);
-    outb(0xA1, 0xEF);
+    outb(0x21, 0xFC);
+    outb(0xA1, 0xFF);
 }
 
 static void pit_init(void) {
@@ -289,20 +225,71 @@ void timer_irq(void) {
     outb(0x20, 0x20);
 }
 
-void wait_ticks(u32 n) {
+static void wait_ticks(u32 n) {
     u32 start = ticks;
     while (ticks - start < n)
         halt();
 }
 
-int kbd_read(void);
+static const char kmap[0x3A] = {
+    0, 0x1B, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b', '\t',
+    'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n', 0,
+    'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0, '\\',
+    'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0, '*', 0, ' '
+};
+
+static const char kmap_shift[0x3A] = {
+    0, 0x1B, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '\b', '\t',
+    'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', '\n', 0,
+    'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '~', 0, '|',
+    'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?', 0, '*', 0, ' '
+};
+
+static volatile u8 kbuf[256];
+static volatile u8 kbuf_head, kbuf_tail;
+static volatile u8 shift_down;
+
+void keyboard_irq(void) {
+    u8 sc = inb(0x60);
+    outb(0x20, 0x20);
+
+    if (sc == 0x2A || sc == 0x36) {
+        shift_down = 1;
+        return;
+    }
+    if (sc == 0xAA || sc == 0xB6) {
+        shift_down = 0;
+        return;
+    }
+    if ((sc & 0x80) || sc >= 0x3A)
+        return;
+
+    char c = shift_down ? kmap_shift[sc] : kmap[sc];
+    if (!c)
+        return;
+
+    u8 next = (u8)(kbuf_head + 1);
+    if (next == kbuf_tail)
+        return;
+    kbuf[kbuf_head] = (u8)c;
+    kbuf_head = next;
+}
+
+static int kbd_read(void) {
+    int c = -1;
+    irq_off();
+    if (kbuf_tail != kbuf_head)
+        c = kbuf[kbuf_tail++];
+    irq_on();
+    return c;
+}
 
 static void speaker_off(void) {
     outb(0x61, inb(0x61) & 0xFC);
 }
 
 /* Blocking square-wave tone on PIT channel 2 routed to the PC speaker. */
-void sound_tone(u32 hz, u32 ms) {
+static void sound_tone(u32 hz, u32 ms) {
     if (hz < 20 || hz > 20000) {
         speaker_off();
         return;
@@ -402,24 +389,6 @@ static void show_time(void) {
     put2(min);
     putc(':');
     put2(sec);
-}
-
-void serial_str(const char *s) {
-    while (*s)
-        serial_putc(*s++);
-}
-
-void rtc_now(u8 *out) {
-    while (rtc(0x0A) & 0x80)
-        ;
-    u8 sec = rtc(0x00), min = rtc(0x02), hour = rtc(0x04) & 0x7F;
-    u8 day = rtc(0x07), mon = rtc(0x08), year = rtc(0x09), status_b = rtc(0x0B);
-    if (!(status_b & 0x04)) {
-        sec = from_bcd(sec); min = from_bcd(min); hour = from_bcd(hour);
-        day = from_bcd(day); mon = from_bcd(mon); year = from_bcd(year);
-    }
-    out[0] = sec; out[1] = min; out[2] = hour;
-    out[3] = day; out[4] = mon; out[5] = year;
 }
 
 static int str_eq(const char *a, const char *b) {
@@ -537,13 +506,12 @@ static void put_mac(const u8 *mac) {
     }
 }
 
-void draw_sqr(u32 x, u32 y) {
+static void draw_sqr(u32 x, u32 y) {
     u16 cell = (u16)(0xDB | (ATTR_SQR << 8));
     for (u32 dy = 0; dy < 2; dy++)
         for (u32 dx = 0; dx < 2; dx++)
             VGA_MEM[(y + dy) * VGA_COLS + x + dx] = cell;
 }
-
 
 static int slen(const char *s) {
     int n = 0;
@@ -586,7 +554,7 @@ static void splash_frame(u8 bg) {
         }
     }
     splash_text(14, "OpenFiddles", 0x0F, bg);
-    splash_text(16, "OpenAir", 0x07, bg);
+    splash_text(16, "Textile OS", 0x07, bg);
 }
 
 static void boot_splash(void) {
@@ -594,7 +562,7 @@ static void boot_splash(void) {
     for (int cycle = 0; cycle < 4; cycle++)
         for (int f = 0; f < 12; f++) {
             splash_frame(pulse[f]);
-            wait_ticks(10);
+            wait_ticks(5);
         }
 }
 
@@ -633,9 +601,6 @@ void syscall_dispatch(struct saved_regs *r) {
     case SYS_GETKEY:
         r->eax = (u32)kbd_read();
         break;
-    case SYS_EXIT:
-        user_leave();
-        break;
     case SYS_PRINT:
         puts((const char *)r->ebx);
         break;
@@ -649,7 +614,7 @@ static int run_app(void) {
     const u32 *head = (const u32 *)TX_APP_BASE;
     if (head[0] != TX_APP_MAGIC)
         return 0;
-    enter_user(head[1], USER_STACK_TOP);
+    ((void (*)(void))head[1])();
     return 1;
 }
 
@@ -754,9 +719,6 @@ static void run_command(char *input) {
         put_dec(hz);
         puts(" Hz\n");
         sound_tone(hz, ms);
-    } else if (str_eq(argv[0], "desktop")) {
-        desktop_run();
-        clear_screen();
     } else if (str_eq(argv[0], "run")) {
         if (!run_app()) {
             say_error("no app installed\n");
@@ -770,25 +732,24 @@ static void run_command(char *input) {
     }
 }
 
+void cpu_fault(void) {
+    say_error("\nCPU exception. The kernel stopped.\n");
+    for (;;)
+        halt();
+}
+
 void kmain(void) {
     char line[80];
     int len = 0;
 
     serial_init();
     clear_screen();
-    gdt_init();
     idt_init();
     pic_init();
-    if (mouse_init())
-        serial_str("mouse: ps/2 ready\n");
-    else
-        serial_str("mouse: no ps/2 mouse\n");
     pit_init();
     irq_on();
     boot_splash();
     run_app();
-    clear_screen();
-    desktop_run();
     clear_screen();
 
     cur_attr = ATTR_OK;
