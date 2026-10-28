@@ -200,6 +200,7 @@ static void draw_taskbar(void) {
         fill(TASK_ROW, btn_col(i), 1, 9, ' ', a);
         text(TASK_ROW, btn_col(i) + 1, icon_label[i], a, 7);
     }
+    text(TASK_ROW, VGA_COLS - 30, "Esc: text shell", TASK_ATTR, 15);
     rtc_now(t);
     draw_hms(TASK_ROW, VGA_COLS - 9, TASK_ATTR, t);
 }
