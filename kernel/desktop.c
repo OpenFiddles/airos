@@ -15,6 +15,13 @@
 #define PIANO_FLASH 12
 #define FRAME_TICKS 2
 #define CURSOR_ATTR 0x0F
+#define FILES_ROW 10
+#define EXPLORER_STAGE ((const u8 *)0x30000)
+#define EXPLORER_STAGE_LEN 4608
+#define APP_STACK_TOP 0x28000u
+
+int airp_load(const u8 *file, u32 len, u32 *entry);
+void enter_user(u32 entry, u32 user_esp);
 
 enum { WIN_HELLO, WIN_PIANO, WIN_CLOCK, WIN_TERM, WIN_COUNT };
 
@@ -144,6 +151,16 @@ static void piano_play(int i) {
     sound_tone(piano_hz[i], 120);
 }
 
+static void launch_explorer(void) {
+    u32 entry = 0;
+    if (airp_load(EXPLORER_STAGE, EXPLORER_STAGE_LEN, &entry) != 0) {
+        serial_str("desktop: explorer.airp did not load\n");
+        return;
+    }
+    serial_str("desktop: open explorer\n");
+    enter_user(entry, APP_STACK_TOP);
+}
+
 #define TERM_IN_MAX 50
 static char term_in[TERM_IN_MAX + 1];
 static int term_in_len;
@@ -246,6 +263,8 @@ static void draw_frame(void) {
         fill(icon_row[i], 2, 1, 9, ' ', ICON_ATTR);
         text(icon_row[i], 3, icon_label[i], ICON_ATTR, 7);
     }
+    fill(FILES_ROW, 2, 1, 9, ' ', ICON_ATTR);
+    text(FILES_ROW, 3, "Files", ICON_ATTR, 7);
     for (int i = 0; i < WIN_COUNT; i++)
         if (wins[z[i]].open) draw_window(z[i]);
     draw_taskbar();
@@ -283,6 +302,7 @@ static void click(i32 mx, i32 my) {
     }
     for (int i = 0; i < WIN_COUNT; i++)
         if (mx >= 2 && mx <= 10 && my == icon_row[i]) { open_win(i); return; }
+    if (mx >= 2 && mx <= 10 && my == FILES_ROW) { launch_explorer(); return; }
 }
 
 static void handle_mouse(void) {
