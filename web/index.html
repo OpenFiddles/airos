@@ -72,7 +72,6 @@
     status.textContent = 'Running. Click the screen and type.';
   });
 
-  // Automatically captures browser pointer locks to stream physical coordinates inside the sandbox
   screenContainer.addEventListener('click', () => {
     if (emulator.is_running()) {
       emulator.mouse_set_status(true);
@@ -98,7 +97,6 @@
     b.addEventListener('click', () => {
       const codes = SC[b.dataset.key];
       if (codes && emulator.is_running()) emulator.keyboard_send_scancodes(codes);
-      typebox.focus();
     });
   });
 
@@ -116,6 +114,7 @@
     if (text) emulator.keyboard_send_text(text);
     typebox.value = '';
   });
+
   window.addEventListener('error', (e) => {
     status.textContent = 'The emulator failed to load: ' + e.message;
   });
