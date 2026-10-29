@@ -21,7 +21,9 @@ OBJS = $(BUILD)/entry.o \
        $(BUILD)/mouse_init.o \
        $(BUILD)/pit_timer.o \
        $(BUILD)/axi.o \
-       $(BUILD)/fs.o
+       $(BUILD)/fs.o \
+       $(BUILD)/sysdispatch.o \
+       $(BUILD)/airp.o
 
 all: $(BUILD)/textile.img
 
@@ -71,6 +73,12 @@ $(BUILD)/axi.o: kernel/axi.c include/axi.h kernel/kernel.h kernel/textile.h | $(
 $(BUILD)/fs.o: kernel/fs.c include/fs.h kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/sysdispatch.o: kernel/sysdispatch.c kernel/kernel.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/airp.o: kernel/airp.c include/airp.h kernel/textile.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # --- Modular Subsystem Drivers ---
 $(BUILD)/mouse_cursor.o: kernel/mouse_cursor.c kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -105,13 +113,28 @@ $(BUILD)/app.bin: $(BUILD)/app.elf
 	test `stat -c %s $@` -le 4096
 	truncate -s 4096 $@
 
+# --- Explorer as .airp (stage 1 loads it from LBA 109 to 0x30000) ---
+$(BUILD)/explorer.o: userland/explorer.c include/axi.h include/fs.h kernel/textile.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/explorer.elf: $(BUILD)/explorer.o $(BUILD)/rt.o userland/app.ld
+	$(LD) -m elf_i386 -nostdlib -T userland/app.ld -o $@ $(BUILD)/explorer.o $(BUILD)/rt.o
+
+$(BUILD)/explorer.bin: $(BUILD)/explorer.elf
+	$(OBJCOPY) -O binary $< $@
+	test `stat -c %s $@` -le 4096
+
+$(BUILD)/explorer.airp: $(BUILD)/explorer.bin tools/airpack.py
+	python3 tools/airpack.py $(BUILD)/explorer.bin $@ explorer
+
 # Assembles the disk image using the precise structural sector positioning offsets
-$(BUILD)/textile.img: $(BUILD)/stage1.bin $(BUILD)/stage2.bin $(BUILD)/kernel.bin $(BUILD)/app.bin
+$(BUILD)/textile.img: $(BUILD)/stage1.bin $(BUILD)/stage2.bin $(BUILD)/kernel.bin $(BUILD)/app.bin $(BUILD)/explorer.airp
 	dd if=/dev/zero of=$@ bs=512 count=2880 status=none
 	dd if=$(BUILD)/stage1.bin of=$@ bs=512 count=1 conv=notrunc status=none
 	dd if=$(BUILD)/stage2.bin of=$@ bs=512 seek=1 count=4 conv=notrunc status=none
 	dd if=$(BUILD)/kernel.bin of=$@ bs=512 seek=5 count=96 conv=notrunc status=none
 	dd if=$(BUILD)/app.bin of=$@ bs=512 seek=101 count=8 conv=notrunc status=none
+	dd if=$(BUILD)/explorer.airp of=$@ bs=512 seek=109 count=9 conv=notrunc status=none
 
 # --- Window API demo: same image layout, app slot holds userland/win_app.c ---
 $(BUILD)/win_app.o: userland/win_app.c include/axi.h kernel/textile.h | $(BUILD)

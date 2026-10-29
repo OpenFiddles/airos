@@ -12,7 +12,7 @@ pages:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   script:
     - apt-get update -qq
-    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nasm gcc-multilib binutils make seabios vgabios xorriso > /dev/null
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nasm gcc-multilib binutils make seabios vgabios xorriso python3 > /dev/null
     - make
     - mkdir -p public/v86 /tmp/v86
     - cp web/index.html public/index.html

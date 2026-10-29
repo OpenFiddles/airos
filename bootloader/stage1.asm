@@ -1,11 +1,13 @@
 ; Stage 1 boot sector: loads Stage 2 (LBA 1..4) to 0x0000:0x9000,
-; the kernel (LBA 5..100) to 0x10000, and the app (LBA 101..108) to 0x20000.
+; the kernel (LBA 5..100) to 0x10000, the app (LBA 101..108) to 0x20000,
+; and explorer.airp (LBA 109..117) to 0x30000.
 [BITS 16]
 [ORG 0x7C00]
 
 STAGE2_SECTORS equ 4
 KERNEL_SECTORS equ 96
 APP_SECTORS    equ 8
+EXPLORER_SECTORS equ 9
 
 start:
     cli
@@ -40,6 +42,14 @@ start:
     mov es, ax
     mov word [offset], 0
     mov word [remaining], APP_SECTORS
+    call load_range
+
+    ; Load explorer.airp to 0x3000:0x0000 (Physical 0x30000)
+    mov ax, 0x3000
+    mov es, ax
+    mov word [lba], 109
+    mov word [offset], 0
+    mov word [remaining], EXPLORER_SECTORS
     call load_range
 
     ; Pass boot drive to Stage 2 in DL and jump

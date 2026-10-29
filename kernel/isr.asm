@@ -8,7 +8,7 @@ global isr_syscall
 extern timer_irq
 extern keyboard_irq
 extern cpu_fault
-extern syscall_dispatch
+extern airos_dispatch
 
 isr_timer:
     pushad          ; Push EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI
@@ -55,9 +55,10 @@ isr_syscall:
     pushad
     cld
     
-    ; Pass the pointer to all saved registers to C
+    ; Pass the pointer to all saved registers to C; airos_dispatch tries the window
+    ; and filesystem handlers first, then the base syscall table.
     push esp        
-    call syscall_dispatch
+    call airos_dispatch
     add esp, 4
     
     ; EAX is the standard return register in C/x86. 
