@@ -19,7 +19,8 @@ OBJS = $(BUILD)/entry.o \
        $(BUILD)/rtl8139.o \
        $(BUILD)/mouse_cursor.o \
        $(BUILD)/mouse_init.o \
-       $(BUILD)/pit_timer.o
+       $(BUILD)/pit_timer.o \
+       $(BUILD)/axi.o
 
 all: $(BUILD)/textile.img
 
@@ -61,6 +62,9 @@ $(BUILD)/panic.o: kernel/panic.c kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/rtl8139.o: kernel/rtl8139.c kernel/kernel.h kernel/textile.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/axi.o: kernel/axi.c include/axi.h kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # --- Modular Subsystem Drivers ---
@@ -105,8 +109,30 @@ $(BUILD)/textile.img: $(BUILD)/stage1.bin $(BUILD)/stage2.bin $(BUILD)/kernel.bi
 	dd if=$(BUILD)/kernel.bin of=$@ bs=512 seek=5 count=96 conv=notrunc status=none
 	dd if=$(BUILD)/app.bin of=$@ bs=512 seek=101 count=8 conv=notrunc status=none
 
+# --- Window API demo: same image layout, app slot holds userland/win_app.c ---
+$(BUILD)/win_app.o: userland/win_app.c include/axi.h kernel/textile.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/win_app.elf: $(BUILD)/win_app.o $(BUILD)/rt.o userland/app.ld
+	$(LD) -m elf_i386 -nostdlib -T userland/app.ld -o $@ $(BUILD)/win_app.o $(BUILD)/rt.o
+
+$(BUILD)/win_app.bin: $(BUILD)/win_app.elf
+	$(OBJCOPY) -O binary $< $@
+	test `stat -c %s $@` -le 4096
+	truncate -s 4096 $@
+
+$(BUILD)/win-demo.img: $(BUILD)/stage1.bin $(BUILD)/stage2.bin $(BUILD)/kernel.bin $(BUILD)/win_app.bin
+	dd if=/dev/zero of=$@ bs=512 count=2880 status=none
+	dd if=$(BUILD)/stage1.bin of=$@ bs=512 count=1 conv=notrunc status=none
+	dd if=$(BUILD)/stage2.bin of=$@ bs=512 seek=1 count=4 conv=notrunc status=none
+	dd if=$(BUILD)/kernel.bin of=$@ bs=512 seek=5 count=96 conv=notrunc status=none
+	dd if=$(BUILD)/win_app.bin of=$@ bs=512 seek=101 count=8 conv=notrunc status=none
+
 run: $(BUILD)/textile.img
 	$(QEMU) -fda $(BUILD)/textile.img -serial stdio -no-reboot
+
+win-demo: $(BUILD)/win-demo.img
+	$(QEMU) -fda $(BUILD)/win-demo.img -serial stdio -no-reboot
 
 test: $(BUILD)/textile.img
 	python3 tests/smoke.py $(BUILD)/textile.img
@@ -114,4 +140,4 @@ test: $(BUILD)/textile.img
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all run test clean
+.PHONY: all run win-demo test clean
