@@ -27,10 +27,10 @@ $(BUILD):
 	mkdir -p $(BUILD)
 
 # --- Bootloader Stages ---
-$(BUILD)/stage1.bin: boot/stage1.asm | $(BUILD)
+$(BUILD)/stage1.bin: bootloader/stage1.asm | $(BUILD)
 	$(AS) -f bin $< -o $@
 
-$(BUILD)/stage2.bin: boot/stage2.asm | $(BUILD)
+$(BUILD)/stage2.bin: bootloader/stage2.asm | $(BUILD)
 	$(AS) -f bin $< -o $@
 	truncate -s 2048 $@
 
@@ -45,32 +45,32 @@ $(BUILD)/usermode.o: kernel/usermode.asm | $(BUILD)
 	$(AS) -f elf32 $< -o $@
 
 # --- Kernel Core C Objects ---
-$(BUILD)/desktop.o: kernel/desktop.c kernel/kernel.h include/textile.h | $(BUILD)
+$(BUILD)/desktop.o: kernel/desktop.c kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/kernel.o: kernel/kernel.c kernel/kernel.h include/textile.h | $(BUILD)
+$(BUILD)/kernel.o: kernel/kernel.c kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/drivers.o: kernel/drivers.c kernel/kernel.h include/textile.h | $(BUILD)
+$(BUILD)/drivers.o: kernel/drivers.c kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/keyboard.o: kernel/keyboard.c kernel/kernel.h include/textile.h | $(BUILD)
+$(BUILD)/keyboard.o: kernel/keyboard.c kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/panic.o: kernel/panic.c kernel/kernel.h include/textile.h | $(BUILD)
+$(BUILD)/panic.o: kernel/panic.c kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/rtl8139.o: kernel/rtl8139.c kernel/kernel.h include/textile.h | $(BUILD)
+$(BUILD)/rtl8139.o: kernel/rtl8139.c kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # --- Modular Subsystem Drivers ---
-$(BUILD)/mouse_cursor.o: drivers/mouse_cursor.c kernel/kernel.h include/textile.h | $(BUILD)
+$(BUILD)/mouse_cursor.o: kernel/mouse_cursor.c kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/mouse_init.o: drivers/mouse_init.c kernel/kernel.h include/textile.h | $(BUILD)
+$(BUILD)/mouse_init.o: kernel/mouse_init.c kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/pit_timer.o: drivers/pit_timer.c kernel/kernel.h include/textile.h | $(BUILD)
+$(BUILD)/pit_timer.o: kernel/pit_timer.c kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # --- Linking and Image Creation ---
@@ -83,14 +83,14 @@ $(BUILD)/kernel.bin: $(BUILD)/kernel.elf
 	truncate -s 49152 $@
 
 # --- User Space App Objects ---
-$(BUILD)/app.o: app/app.c include/textile.h | $(BUILD)
+$(BUILD)/app.o: userland/app.c kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/rt.o: app/rt.c | $(BUILD)
+$(BUILD)/rt.o: userland/rt.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/app.elf: $(BUILD)/app.o $(BUILD)/rt.o app/app.ld
-	$(LD) -m elf_i386 -nostdlib -T app/app.ld -o $@ $(BUILD)/app.o $(BUILD)/rt.o
+$(BUILD)/app.elf: $(BUILD)/app.o $(BUILD)/rt.o userland/app.ld
+	$(LD) -m elf_i386 -nostdlib -T userland/app.ld -o $@ $(BUILD)/app.o $(BUILD)/rt.o
 
 $(BUILD)/app.bin: $(BUILD)/app.elf
 	$(OBJCOPY) -O binary $< $@

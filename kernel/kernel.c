@@ -1,7 +1,7 @@
 /* AirOS kernel: VGA console, COM1 mirror, PIC, PIT, PS/2 keyboard, CMOS clock, RTL8139 probe,
    tween engine, PC speaker, int 0x80 syscall gate and a flat app loaded at TX_APP_BASE. */
 
-#include "../include/textile.h"
+#include "textile.h"
 
 typedef unsigned char u8;
 typedef unsigned short u16;

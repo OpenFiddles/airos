@@ -1,4 +1,4 @@
-#include "../include/textile.h"
+#include "../kernel/textile.h"
 
 typedef unsigned char u8;
 typedef unsigned int u32;

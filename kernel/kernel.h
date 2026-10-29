@@ -1,7 +1,7 @@
 #ifndef KERNEL_H
 #define KERNEL_H
 
-#include "../include/textile.h"
+#include "textile.h"
 
 /* Primary Typings */
 typedef unsigned char u8;
