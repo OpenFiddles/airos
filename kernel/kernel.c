@@ -1,4 +1,4 @@
-/* Textile OS kernel: VGA console, COM1 mirror, PIC, PIT, PS/2 keyboard, CMOS clock, RTL8139 probe,
+/* AirOS kernel: VGA console, COM1 mirror, PIC, PIT, PS/2 keyboard, CMOS clock, RTL8139 probe,
    tween engine, PC speaker, int 0x80 syscall gate and a flat app loaded at TX_APP_BASE. */
 
 #include "../include/textile.h"
@@ -66,6 +66,51 @@ void *memcpy(void *dst, const void *src, u32 n) {
 static int cur_row, cur_col;
 static u8 cur_attr = ATTR_TEXT;
 
+#define TERM_COLS 56
+#define TERM_KEEP 32
+#define TERM_INPUT_MAX 50
+
+int kbd_toggle_take(void);
+
+static char term_buf[TERM_KEEP][TERM_COLS];
+static int term_len[TERM_KEEP];
+static int term_total = 1;
+int term_capture;
+
+static void term_put(char c) {
+    int cur = (term_total - 1) % TERM_KEEP;
+    if (c == '\n') {
+        term_total++;
+        term_len[(term_total - 1) % TERM_KEEP] = 0;
+        return;
+    }
+    if (c == '\b') {
+        if (term_len[cur] > 0)
+            term_len[cur]--;
+        return;
+    }
+    if (term_len[cur] >= TERM_COLS) {
+        term_total++;
+        cur = (term_total - 1) % TERM_KEEP;
+        term_len[cur] = 0;
+    }
+    term_buf[cur][term_len[cur]++] = c;
+}
+
+static void term_clear(void) {
+    term_total = 1;
+    term_len[0] = 0;
+}
+
+int term_count(void) {
+    return term_total;
+}
+
+const char *term_text(int idx, int *len) {
+    *len = term_len[idx % TERM_KEEP];
+    return term_buf[idx % TERM_KEEP];
+}
+
 
 static void serial_init(void) {
     outb(COM1 + 1, 0x00);
@@ -92,6 +137,10 @@ static void update_cursor(void) {
 }
 
 static void clear_screen(void) {
+    if (term_capture) {
+        term_clear();
+        return;
+    }
     for (int i = 0; i < VGA_COLS * VGA_ROWS; i++)
         VGA_MEM[i] = (u16)(' ' | (cur_attr << 8));
     cur_row = 0;
@@ -115,6 +164,10 @@ static void newline(void) {
 
 void putc(char c) {
     serial_putc(c);
+    if (term_capture) {
+        term_put(c);
+        return;
+    }
     if (c == '\n') {
         newline();
     } else if (c == '\b') {
@@ -586,7 +639,7 @@ static void splash_frame(u8 bg) {
         }
     }
     splash_text(14, "OpenFiddles", 0x0F, bg);
-    splash_text(16, "OpenAir", 0x07, bg);
+    splash_text(16, "AirOS", 0x07, bg);
 }
 
 static void boot_splash(void) {
@@ -672,7 +725,7 @@ static void run_command(char *input) {
         puts("  net            show the RTL8139 network card and its MAC\n");
         puts("  sqr X Y        draw a 2x2 square at column X, row Y\n");
         puts("  beep HZ MS     play a tone on the PC speaker\n");
-        puts("  desktop        open the home screen (Esc returns here)\n");
+        puts("  Ctrl+Alt+D    switch between text mode and the desktop\n");
         puts("  run            run the intro app again\n");
     } else if (str_eq(argv[0], "clear")) {
         clear_screen();
@@ -755,9 +808,13 @@ static void run_command(char *input) {
         puts(" Hz\n");
         sound_tone(hz, ms);
     } else if (str_eq(argv[0], "desktop")) {
-        desktop_run();
+        puts("press Ctrl+Alt+D to open the desktop\n");
         clear_screen();
     } else if (str_eq(argv[0], "run")) {
+        if (term_capture) {
+            puts("run needs text mode: press Ctrl+Alt+D\n");
+            return;
+        }
         if (!run_app()) {
             say_error("no app installed\n");
             return;
@@ -770,32 +827,21 @@ static void run_command(char *input) {
     }
 }
 
-void kmain(void) {
+static void text_shell_run(void) {
     char line[80];
     int len = 0;
 
-    serial_init();
+    serial_str("ui: text mode\n");
     clear_screen();
-    gdt_init();
-    idt_init();
-    pic_init();
-    if (mouse_init())
-        serial_str("mouse: ps/2 ready\n");
-    else
-        serial_str("mouse: no ps/2 mouse\n");
-    pit_init();
-    irq_on();
-    boot_splash();
-    run_app();
-    clear_screen();
-
     cur_attr = ATTR_OK;
-    puts("Textile OS 0.3 kernel\n");
+    puts("AirOS 0.3 kernel\n");
     cur_attr = ATTR_TEXT;
-    puts("Keyboard, timer, clock, speaker, animation and I/O ports are live. Type help.\n");
+    puts("Text mode. Ctrl+Alt+D switches to the desktop. Type help.\n");
     puts("textile> ");
 
     for (;;) {
+        if (kbd_toggle_take())
+            return;
         int c = kbd_read();
         if (c < 0) {
             halt();
@@ -817,4 +863,42 @@ void kmain(void) {
             putc((char)c);
         }
     }
+}
+
+void kmain(void) {
+    serial_init();
+    clear_screen();
+    gdt_init();
+    idt_init();
+    pic_init();
+    if (mouse_init())
+        serial_str("mouse: ps/2 ready\n");
+    else
+        serial_str("mouse: no ps/2 mouse\n");
+    pit_init();
+    irq_on();
+    boot_splash();
+    run_app();
+    clear_screen();
+
+    for (;;) {
+        desktop_run();
+        text_shell_run();
+    }
+}
+
+void terminal_exec(const char *cmd) {
+    char buf[TERM_INPUT_MAX + 1];
+    int n = 0;
+    while (cmd[n] && n < TERM_INPUT_MAX) {
+        buf[n] = cmd[n];
+        n++;
+    }
+    buf[n] = 0;
+    term_capture = 1;
+    puts("> ");
+    puts(buf);
+    putc('\n');
+    run_command(buf);
+    term_capture = 0;
 }

@@ -19,6 +19,8 @@ try:
     mon = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     mon.connect(sock)
     time.sleep(7)
+    mon.sendall(b'sendkey ctrl-alt-d\n')
+    time.sleep(1.5)
 
     keys = {' ': 'spc', '\n': 'ret'}
 
@@ -37,7 +39,9 @@ finally:
     proc.kill()
 
 checks = [
-    ('kernel banner', 'Textile OS 0.3'),
+    ('kernel banner', 'AirOS 0.3'),
+    ('desktop boots first', 'desktop: start'),
+    ('ctrl+alt+d enters text mode', 'ui: text mode'),
     ('help list', 'Commands:'),
     ('help lists net', 'net            show'),
     ('help lists beep', 'beep HZ MS'),

@@ -15,6 +15,9 @@
   #screen_container canvas { display: block; max-width: 100%; cursor: crosshair; }
   .status { font-size: .9rem; color: #9aa; min-height: 1.5em; }
   button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid #444; background: #1c1d21; color: #eee; min-height: 44px; }
+  .keys { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .keys button { min-width: 64px; }
+  #typebox { width: 100%; box-sizing: border-box; font: inherit; padding: 10px; border-radius: 6px; border: 1px solid #444; background: #0b0c0e; color: #eee; min-height: 44px; }
   button:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
   code { color: #e8e8e8; }
 </style>
@@ -22,11 +25,24 @@
 <body>
 <main>
   <h1>AirOS, running in your browser</h1>
-  <p>Click the black screen, then type. This is the Textile OS kernel from the repo, running inside an x86 emulator (v86). Nothing to install, and it works in Safari on an iPad.</p>
+  <p>Click the black screen, then type. This is the AirOS kernel from the repo, running inside an x86 emulator (v86). Nothing to install, and it works in Safari on an iPad.</p>
   <div id='screen'><div id='screen_container'><div></div><canvas></canvas></div></div>
   <p class='status' id='status'>Loading the emulator...</p>
+  <div class='keys' aria-label='Keys for iPad and iPhone keyboards'>
+    <button type='button' data-key='esc' disabled>Esc</button>
+    <button type='button' data-key='tab' disabled>Tab</button>
+    <button type='button' data-key='enter' disabled>Enter</button>
+    <button type='button' data-key='backspace' disabled>Backspace</button>
+    <button type='button' data-key='up' disabled>Up</button>
+    <button type='button' data-key='down' disabled>Down</button>
+    <button type='button' data-key='left' disabled>Left</button>
+    <button type='button' data-key='right' disabled>Right</button>
+    <button type='button' data-key='devmode' disabled>Ctrl+Alt+D</button>
+  </div>
+  <p><label for='typebox'>Type here on iPad (keeps the keyboard open):</label></p>
+  <input id='typebox' type='text' autocapitalize='off' autocorrect='off' spellcheck='false' autocomplete='off' placeholder='Tap here, then type' disabled>
   <p><button id='reset' type='button' disabled>Restart the OS</button></p>
-  <p>Try: <code>help</code>, <code>time</code>, <code>uptime</code>, <code>in 60</code>, <code>echo hello</code>, <code>mouse 15 10</code>, <code>beep 440 200</code>.</p>
+  <p>Press Ctrl+Alt+D to switch between the desktop and text mode. On the desktop, the Terminal window runs commands. Try: <code>help</code>, <code>time</code>, <code>uptime</code>, <code>in 60</code>, <code>echo hello</code>, <code>mouse 15 10</code>, <code>beep 440 200</code>.</p>
   <p>Source: <a href='https://gitlab.com/openfiddles/airos'>gitlab.com/openfiddles/airos</a></p>
 </main>
 <script src='v86/libv86.js'></script>
@@ -49,6 +65,7 @@
   emulator.add_listener('emulator-ready', () => {
     status.textContent = 'Booting AirOS...';
     reset.disabled = false;
+    setKeysEnabled(true);
   });
 
   emulator.add_listener('emulator-started', () => {
@@ -63,6 +80,42 @@
   });
 
   reset.addEventListener('click', () => emulator.restart());
+
+  const SC = {
+    esc: [0x01, 0x81], tab: [0x0F, 0x8F], enter: [0x1C, 0x9C], backspace: [0x0E, 0x8E],
+    up: [0xE0, 0x48, 0xE0, 0xC8], down: [0xE0, 0x50, 0xE0, 0xD0],
+    left: [0xE0, 0x4B, 0xE0, 0xCB], right: [0xE0, 0x4D, 0xE0, 0xCD],
+    devmode: [0x1D, 0x38, 0x20, 0xA0, 0xB8, 0x9D]
+  };
+  const typebox = document.getElementById('typebox');
+  const keyButtons = document.querySelectorAll('[data-key]');
+  const setKeysEnabled = (on) => {
+    keyButtons.forEach((b) => { b.disabled = !on; });
+    typebox.disabled = !on;
+  };
+
+  keyButtons.forEach((b) => {
+    b.addEventListener('click', () => {
+      const codes = SC[b.dataset.key];
+      if (codes && emulator.is_running()) emulator.keyboard_send_scancodes(codes);
+      typebox.focus();
+    });
+  });
+
+  typebox.addEventListener('keydown', (e) => {
+    const map = { Escape: 'esc', Tab: 'tab', Enter: 'enter', Backspace: 'backspace',
+                  ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+    if (map[e.key]) {
+      e.preventDefault();
+      emulator.keyboard_send_scancodes(SC[map[e.key]]);
+    }
+  });
+  typebox.addEventListener('input', (e) => {
+    if (e.isComposing) return;
+    const text = typebox.value;
+    if (text) emulator.keyboard_send_text(text);
+    typebox.value = '';
+  });
   window.addEventListener('error', (e) => {
     status.textContent = 'The emulator failed to load: ' + e.message;
   });

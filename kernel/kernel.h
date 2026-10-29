@@ -144,6 +144,12 @@ int desktop_run(void);
 void wait_ticks(u32 n);
 void sound_tone(u32 hz, u32 ms);
 
+int kbd_toggle_take(void);
+int term_count(void);
+const char *term_text(int idx, int *len);
+void terminal_exec(const char *cmd);
+extern int term_capture;
+
 /* Arrow keys and pointer nudging, used by the desktop */
 int kbd_arrow_read(void);
 void cursor_nudge(i32 dx, i32 dy);

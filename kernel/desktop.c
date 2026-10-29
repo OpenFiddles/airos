@@ -16,7 +16,7 @@
 #define FRAME_TICKS 2
 #define CURSOR_ATTR 0x0F
 
-enum { WIN_HELLO, WIN_PIANO, WIN_CLOCK, WIN_COUNT };
+enum { WIN_HELLO, WIN_PIANO, WIN_CLOCK, WIN_TERM, WIN_COUNT };
 
 struct window {
     int open;
@@ -28,17 +28,18 @@ static struct window wins[WIN_COUNT] = {
     {0, 22, 3, 38, 9, "Hello"},
     {0, 12, 12, 40, 7, "Piano"},
     {0, 60, 4, 18, 5, "Clock"},
+    {0, 4, 2, 60, 17, "Terminal"},
 };
 
-static const char *const icon_label[WIN_COUNT] = {"Hello", "Piano", "Clock"};
-static const char *const log_name[WIN_COUNT] = {"hello", "piano", "clock"};
-static const i32 icon_row[WIN_COUNT] = {2, 4, 6};
+static const char *const icon_label[WIN_COUNT] = {"Hello", "Piano", "Clock", "Term"};
+static const char *const log_name[WIN_COUNT] = {"hello", "piano", "clock", "terminal"};
+static const i32 icon_row[WIN_COUNT] = {2, 4, 6, 8};
 static const char piano_keys[PIANO_KEYS + 1] = "asdfghjk";
 static const char piano_notes[PIANO_KEYS + 1] = "CDEFGABC";
 static const u32 piano_hz[PIANO_KEYS] = {262, 294, 330, 349, 392, 440, 494, 523};
 
 static u16 back[VGA_ROWS * VGA_COLS];
-static int z[WIN_COUNT] = {WIN_HELLO, WIN_PIANO, WIN_CLOCK};
+static int z[WIN_COUNT] = {WIN_HELLO, WIN_PIANO, WIN_CLOCK, WIN_TERM};
 static int drag_win = -1;
 static i32 drag_dx, drag_dy;
 static u8 prev_buttons;
@@ -143,13 +144,40 @@ static void piano_play(int i) {
     sound_tone(piano_hz[i], 120);
 }
 
+#define TERM_IN_MAX 50
+static char term_in[TERM_IN_MAX + 1];
+static int term_in_len;
+
+static void draw_terminal(const struct window *w) {
+    int rows = w->h - 2;
+    int total = term_count();
+    int first = total - rows;
+    if (first < 0)
+        first = 0;
+    for (int r = 0; r < rows && first + r < total; r++) {
+        int len;
+        const char *s = term_text(first + r, &len);
+        for (int c = 0; c < len && c < w->w - 4; c++)
+            cell(w->y + 1 + r, w->x + 2 + c, (u8)s[c], BODY_ATTR);
+    }
+    int py = w->y + w->h - 1;
+    term_in[term_in_len] = 0;
+    text(py, w->x + 2, "> ", BODY_ATTR, 2);
+    text(py, w->x + 4, term_in, BODY_ATTR, w->w - 6);
+    cell(py, w->x + 4 + term_in_len, '_', BODY_ATTR);
+}
+
 static void draw_content(int k) {
     const struct window *w = &wins[k];
+    if (k == WIN_TERM) {
+        draw_terminal(w);
+        return;
+    }
     if (k == WIN_HELLO) {
         text(w->y + 2, w->x + 2, "Welcome to AirOS.", BODY_ATTR, w->w - 4);
         text(w->y + 3, w->x + 2, "Click an icon on the left", BODY_ATTR, w->w - 4);
         text(w->y + 4, w->x + 2, "or a button on the taskbar.", BODY_ATTR, w->w - 4);
-        text(w->y + 6, w->x + 2, "Esc drops to the text shell.", BODY_ATTR, w->w - 4);
+        text(w->y + 6, w->x + 2, "Ctrl+Alt+D opens developer mode.", BODY_ATTR, w->w - 4);
         text(w->y + 7, w->x + 2, "Arrow keys move the pointer.", BODY_ATTR, w->w - 4);
     } else if (k == WIN_PIANO) {
         text(w->y + 2, w->x + 2, "Click or type a s d f g h j k", BODY_ATTR, w->w - 4);
@@ -200,7 +228,7 @@ static void draw_taskbar(void) {
         fill(TASK_ROW, btn_col(i), 1, 9, ' ', a);
         text(TASK_ROW, btn_col(i) + 1, icon_label[i], a, 7);
     }
-    text(TASK_ROW, VGA_COLS - 30, "Esc: text shell", TASK_ATTR, 15);
+    text(TASK_ROW, VGA_COLS - 30, "Ctrl+Alt+D: dev", TASK_ATTR, 15);
     rtc_now(t);
     draw_hms(TASK_ROW, VGA_COLS - 9, TASK_ATTR, t);
 }
@@ -270,26 +298,44 @@ static void handle_mouse(void) {
     prev_buttons = b;
 }
 
+static void term_key(int c) {
+    if (c == '\n') {
+        term_in[term_in_len] = 0;
+        terminal_exec(term_in);
+        term_in_len = 0;
+        return;
+    }
+    if (c == '\b') {
+        if (term_in_len > 0)
+            term_in_len--;
+        return;
+    }
+    if (c >= 32 && c < 127 && term_in_len < TERM_IN_MAX)
+        term_in[term_in_len++] = (char)c;
+}
+
 static void handle_key(int c) {
+    if (top_win() == WIN_TERM) {
+        term_key(c);
+        return;
+    }
     if (top_win() != WIN_PIANO) return;
     for (int i = 0; i < PIANO_KEYS; i++)
         if (piano_keys[i] == c) { piano_play(i); return; }
 }
 
 int desktop_run(void) {
-    int running = 1;
     serial_str("desktop: start\n");
     outb(0x3D4, 0x0A);
     outb(0x3D5, 0x20);
     prev_buttons = mouse_buttons;
     drag_win = -1;
-    while (running) {
+    for (;;) {
+        if (kbd_toggle_take())
+            break;
         int c;
-        while ((c = kbd_read()) >= 0) {
-            if (c == 27) { running = 0; break; }
+        while ((c = kbd_read()) >= 0)
             handle_key(c);
-        }
-        if (!running) break;
         int a;
         while ((a = kbd_arrow_read()) >= 0) {
             i32 dx = 0, dy = 0;
@@ -298,7 +344,6 @@ int desktop_run(void) {
             else if (a == ARROW_LEFT) dx = -1;
             else dx = 1;
             cursor_nudge(dx, dy);
-            log_point("desktop: cursor", (i32)cursor_x, (i32)cursor_y);
         }
         handle_mouse();
         if (piano_flash > 0) piano_flash--;

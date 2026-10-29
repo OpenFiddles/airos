@@ -31,6 +31,7 @@ static volatile u8 abuf[16];
 static volatile u8 abuf_head = 0;
 static volatile u8 abuf_tail = 0;
 static volatile u8 ext_pending = 0;
+static volatile u8 ctrl_down = 0, alt_down = 0, toggle_pending = 0;
 
 static void arrow_push(u8 code) {
     u8 next = (u8)((abuf_head + 1) & 15);
@@ -54,6 +55,14 @@ void keyboard_irq(void) {
     }
     if (ext_pending) {
         ext_pending = 0;
+        if (sc == 0x1D || sc == 0x9D) {
+            ctrl_down = (sc == 0x1D);
+            return;
+        }
+        if (sc == 0x38 || sc == 0xB8) {
+            alt_down = (sc == 0x38);
+            return;
+        }
         if (sc & 0x80)
             return;
         if (sc == 0x48)
@@ -64,6 +73,19 @@ void keyboard_irq(void) {
             arrow_push(ARROW_LEFT);
         else if (sc == 0x4D)
             arrow_push(ARROW_RIGHT);
+        return;
+    }
+
+    if (sc == 0x1D || sc == 0x9D) {
+        ctrl_down = (sc == 0x1D);
+        return;
+    }
+    if (sc == 0x38 || sc == 0xB8) {
+        alt_down = (sc == 0x38);
+        return;
+    }
+    if (sc == 0x20 && ctrl_down && alt_down) {
+        toggle_pending = 1;
         return;
     }
 
@@ -126,4 +148,13 @@ int kbd_arrow_read(void) {
 
     irq_on();
     return a;
+}
+
+int kbd_toggle_take(void) {
+    int t;
+    irq_off();
+    t = toggle_pending;
+    toggle_pending = 0;
+    irq_on();
+    return t;
 }

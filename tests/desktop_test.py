@@ -25,7 +25,7 @@ try:
     cmd('mouse_button 0', 0.8)
     for k in ['a', 's', 'd']:
         cmd('sendkey ' + k, 0.4)
-    cmd('sendkey esc', 1.5)
+    cmd('sendkey ctrl-alt-d', 1.5)
     for k in ['h', 'e', 'l', 'p']:
         cmd('sendkey ' + k, 0.3)
     cmd('sendkey ret', 1.0)
