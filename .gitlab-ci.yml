@@ -12,11 +12,12 @@ pages:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   script:
     - apt-get update -qq
-    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nasm gcc-multilib binutils make seabios vgabios > /dev/null
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nasm gcc-multilib binutils make seabios vgabios xorriso > /dev/null
     - make
     - mkdir -p public/v86 /tmp/v86
     - cp web/index.html public/index.html
     - cp build/textile.img public/textile.img
+    - xorriso -as mkisofs -quiet -b textile.img -o public/textile.iso public/textile.img
     
     # Leverages local caching and turns off unnecessary logs completely
     - (cd /tmp/v86 && npm install --no-audit --no-fund --cache $CI_PROJECT_DIR/.npm v86@0.5.472 > /dev/null)
