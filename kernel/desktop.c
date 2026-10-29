@@ -319,6 +319,10 @@ static void handle_key(int c) {
         term_key(c);
         return;
     }
+    if (c == '\n') {
+        click((i32)cursor_x, (i32)cursor_y);
+        return;
+    }
     if (top_win() != WIN_PIANO) return;
     for (int i = 0; i < PIANO_KEYS; i++)
         if (piano_keys[i] == c) { piano_play(i); return; }
