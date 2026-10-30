@@ -60,6 +60,10 @@
     vga_bios: { url: 'v86/vgabios.bin' },
     fda: { url: 'textile.img', size: 1474560 },
     autostart: true,
+    net_device: {
+      type: 'ne2k',
+      relay_url: 'inbrowser'
+    }
   });
 
   emulator.add_listener('emulator-ready', () => {
