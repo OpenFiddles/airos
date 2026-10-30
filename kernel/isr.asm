@@ -9,6 +9,7 @@ extern timer_irq
 extern keyboard_irq
 extern cpu_fault
 extern airos_dispatch
+extern ne2k_irq
 
 isr_timer:
     pushad          ; Push EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI
@@ -65,6 +66,15 @@ isr_syscall:
     ; We overwrite the saved EAX on the stack so popad restores the return value.
     mov [esp + 28], eax 
     
+    popad
+    iretd
+
+isr_ne2k:
+    pushad
+    cld
+    call ne2k_irq
+    mov al, 0x20
+    out 0x20, al
     popad
     iretd
 
