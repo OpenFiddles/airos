@@ -17,6 +17,7 @@ OBJS = $(BUILD)/entry.o \
        $(BUILD)/keyboard.o \
        $(BUILD)/panic.o \
        $(BUILD)/rtl8139.o \
+       $(BUILD)/ne2k.o \
        $(BUILD)/mouse_cursor.o \
        $(BUILD)/mouse_init.o \
        $(BUILD)/pit_timer.o \
@@ -65,6 +66,9 @@ $(BUILD)/panic.o: kernel/panic.c kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/rtl8139.o: kernel/rtl8139.c kernel/kernel.h kernel/textile.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/ne2k.o: kernel/ne2k.c kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/axi.o: kernel/axi.c include/axi.h kernel/kernel.h kernel/textile.h | $(BUILD)
