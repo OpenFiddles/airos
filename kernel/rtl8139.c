@@ -3,11 +3,12 @@
 #include "../include/hw.h"
 
 /*
- * NE2000-compatible NIC driver for v86.
+ * AirOS network driver.
  *
- * v86 defaults to an NE2000 (RTL8390) PCI card at I/O port 0x300, IRQ 10.
- * This driver uses the same register layout as the original RTL8139 code
- * but maps it to the NE2000 I/O window so it works in the browser build.
+ * v86 (browser) uses an NE2000-compatible NIC at I/O port 0x300, IRQ 10.
+ * QEMU defaults to an RTL8139 at I/O port 0xC000, IRQ 11.
+ *
+ * The driver auto-detects which card is present by probing the I/O ports.
  */
 
 #define NE2K_IO      0x300
@@ -32,64 +33,39 @@
 #define NE2K_PSTART  0x40
 #define NE2K_PSTOP   0x80
 
-static u16 ne2k_io;
-static u8 ne2k_mac[6];
+#define RTL_IO       0xC000
+#define RTL_IRQ      11
+#define RTL_REG_MAC0  0x00
+#define RTL_REG_MAC4  0x04
+#define RTL_REG_RBSTART 0x30
+#define RTL_REG_CR    0x37
+#define RTL_REG_CAPR  0x38
+#define RTL_REG_IMR   0x3C
+#define RTL_REG_ISR   0x3E
+#define RTL_REG_TCR   0x40
+#define RTL_REG_RCR   0x44
+#define RTL_REG_CONFIG1 0x52
+#define RTL_REG_MSR   0x58
 
-static int ne2k_init(void) {
-    ne2k_io = NE2K_IO;
-    /* Software reset */
-    outb(ne2k_io + NE2K_RESET, 0x00);
-    /* Set receive buffer: start at page 0x40, stop at 0x80 */
-    outb(ne2k_io + NE2K_STARTPG, NE2K_PSTART);
-    outb(ne2k_io + NE2K_STOPPG, NE2K_PSTOP);
-    outb(ne2k_io + NE2K_BNRY, NE2K_PSTART);
-    /* Accept broadcast + physical match + promiscuous */
-    outb(ne2k_io + NE2K_RCR, 0x8F);
-    /* Disable interrupts initially */
-    outb(ne2k_io + NE2K_IMR, 0x00);
-    /* Enable receiver and transmitter */
-    outb(ne2k_io + NE2K_CMD, 0x0C);
-    /* Read factory MAC from ROM */
-    outb(ne2k_io + NE2K_RSARLO, 0x00);
-    outb(ne2k_io + NE2K_RSARHI, 0x00);
-    outb(ne2k_io + NE2K_RCNTLO, 6);
-    outb(ne2k_io + NE2K_RCNTHI, 0);
-    for (int i = 0; i < 6; i++)
-        ne2k_mac[i] = inb(ne2k_io + NE2K_DCFG);
-    /* Unmask IRQ */
-    outb(ne2k_io + NE2K_IMR, 0xFF);
-    drv_pic_unmask(NE2K_IRQ);
-    return 0;
-}
+#define RX_BUF_SIZE 8192
 
-static void ne2k_irq(void) {
-    u8 isr = inb(ne2k_io + NE2K_ISR);
-    if (isr & 0x01) {
-        /* Receiver interrupt */
-    }
-    if (isr & 0x02) {
-        /* Transmitter interrupt */
-    }
-    if (isr & 0x80) {
-        /* Reset complete */
-    }
-}
+static u16 net_io;
+static u8 net_mac[6];
+static int is_rtl;
 
-static void ne2k_shutdown(void) {
-    outb(ne2k_io + NE2K_IMR, 0x00);
-    outb(ne2k_io + NE2K_CMD, 0x00);
-    drv_pic_mask(NE2K_IRQ);
-}
-
-static const struct drv_ops drv_net_ops = { ne2k_init, ne2k_irq, ne2k_shutdown };
-
-struct drv drv_net_device = { "ne2k", DRV_CLASS_INPUT, &drv_net_ops, NE2K_IRQ, 0 };
+static u8 rx_buffer[RX_BUF_SIZE + 16 + 1500] __attribute__((aligned(4)));
 
 static int net_link_up(void) {
-    return !(inb(ne2k_io + 0x05) & 0x04);
+    if (net_io == 0)
+        return 0;
+    if (is_rtl) {
+        u8 msr = inb(net_io + RTL_REG_MSR);
+        return (msr & 0x04) ? 0 : 1;
+    }
+    return 1;
 }
 
-void drv_net_put_mac(const u8 *mac) {
+static void net_put_mac(const u8 *mac) {
     for (int i = 0; i < 6; i++) {
         put_hexn(mac[i], 2);
         if (i < 5)
@@ -97,5 +73,104 @@ void drv_net_put_mac(const u8 *mac) {
     }
 }
 
-const u8 *drv_net_mac(void) { return ne2k_mac; }
-u16 drv_net_io(void) { return ne2k_io; }
+static int ne2k_init(void) {
+    net_io = NE2K_IO;
+    is_rtl = 0;
+
+    outb(net_io + NE2K_RESET, 0x00);
+    outb(net_io + NE2K_STARTPG, NE2K_PSTART);
+    outb(net_io + NE2K_STOPPG, NE2K_PSTOP);
+    outb(net_io + NE2K_BNRY, NE2K_PSTART);
+    outb(net_io + NE2K_RCR, 0x8F);
+    outb(net_io + NE2K_IMR, 0x00);
+    outb(net_io + NE2K_CMD, 0x0C);
+
+    outb(net_io + NE2K_RSARLO, 0x00);
+    outb(net_io + NE2K_RSARHI, 0x00);
+    outb(net_io + NE2K_RCNTLO, 6);
+    outb(net_io + NE2K_RCNTHI, 0);
+    for (int i = 0; i < 6; i++)
+        net_mac[i] = inb(net_io + NE2K_DCFG);
+
+    outb(net_io + NE2K_IMR, 0xFF);
+    drv_pic_unmask(NE2K_IRQ);
+    return 0;
+}
+
+static int rtl_init(void) {
+    net_io = RTL_IO;
+    is_rtl = 1;
+
+    outb(net_io + RTL_REG_CONFIG1, 0x00);
+    outb(net_io + RTL_REG_CR, 0x10);
+    while ((inb(net_io + RTL_REG_CR) & 0x10) != 0)
+        io_wait();
+
+    outl(net_io + RTL_REG_RBSTART, (u32)&rx_buffer[0]);
+    outw(net_io + RTL_REG_IMR, 0x0005);
+    outl(net_io + RTL_REG_RCR, 0x0000008F);
+    outb(net_io + RTL_REG_CR, 0x0C);
+
+    u32 mac_low = inl(net_io + RTL_REG_MAC0);
+    u16 mac_high = inw(net_io + RTL_REG_MAC4);
+    net_mac[0] = (u8)(mac_low & 0xFF);
+    net_mac[1] = (u8)((mac_low >> 8) & 0xFF);
+    net_mac[2] = (u8)((mac_low >> 16) & 0xFF);
+    net_mac[3] = (u8)(mac_low >> 24);
+    net_mac[4] = (u8)(mac_high & 0xFF);
+    net_mac[5] = (u8)((mac_high >> 8) & 0xFF);
+
+    drv_pic_unmask(RTL_IRQ);
+    return 0;
+}
+
+static void ne2k_irq(void) {
+    u8 isr = inb(net_io + NE2K_ISR);
+    (void)isr;
+}
+
+static void rtl_irq(void) {
+    u16 isr = inw(net_io + RTL_REG_ISR);
+    (void)isr;
+}
+
+static void net_shutdown(void) {
+    if (net_io == 0)
+        return;
+    if (is_rtl) {
+        outb(net_io + RTL_REG_CR, 0x00);
+        outw(net_io + RTL_REG_IMR, 0x0000);
+    } else {
+        outb(net_io + NE2K_IMR, 0x00);
+        outb(net_io + NE2K_CMD, 0x00);
+    }
+    drv_pic_mask(is_rtl ? RTL_IRQ : NE2K_IRQ);
+}
+
+static const struct drv_ops drv_net_ops = { 0, 0, net_shutdown };
+
+struct drv drv_net_device = { "net", DRV_CLASS_CHAR, &drv_net_ops, DRV_NO_IRQ, 0 };
+
+int drv_net_init(void) {
+    /* Probe NE2000 first (v86 browser), then RTL8139 (QEMU). */
+    u8 cfg1 = inb(NE2K_IO + NE2K_DCFG);
+    if (cfg1 != 0xFF && cfg1 != 0x00) {
+        ne2k_init();
+        drv_net_device.irq_line = NE2K_IRQ;
+    } else {
+        /* Check for RTL8139 at 0xC000 */
+        u32 id = inl(RTL_IO + RTL_REG_MAC0);
+        if ((id & 0xFFFF) == RTL_VENDOR && (id >> 16) == RTL_DEVICE) {
+            rtl_init();
+            drv_net_device.irq_line = RTL_IRQ;
+        } else {
+            return -1;
+        }
+    }
+    drv_net_device.ready = 1;
+    return 0;
+}
+
+const u8 *drv_net_mac(void) { return net_mac; }
+u16 drv_net_io(void) { return net_io; }
+int drv_net_is_rtl(void) { return is_rtl; }
