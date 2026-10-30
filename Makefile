@@ -23,8 +23,7 @@ OBJS = $(BUILD)/entry.o \
        $(BUILD)/axi.o \
        $(BUILD)/fs.o \
        $(BUILD)/sysdispatch.o \
-       $(BUILD)/airp.o \
-       $(BUILD)/drv_net.o
+       $(BUILD)/airp.o
 
 all: $(BUILD)/textile.img
 
@@ -78,9 +77,6 @@ $(BUILD)/sysdispatch.o: kernel/sysdispatch.c kernel/kernel.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/airp.o: kernel/airp.c include/airp.h kernel/textile.h | $(BUILD)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD)/drv_net.o: drivers/drv_net.c include/drv_net.h include/drv.h include/drv_pic.h include/hw.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # --- Modular Subsystem Drivers ---
@@ -150,7 +146,7 @@ $(BUILD)/win_app.elf: $(BUILD)/win_app.o $(BUILD)/rt.o userland/app.ld
 $(BUILD)/win_app.bin: $(BUILD)/win_app.elf
 	$(OBJCOPY) -O binary $< $@
 	test `stat -c %s $@` -le 4096
-	truncate -s 4096 $@
+	test `stat -c %s $@` -le 4096
 
 $(BUILD)/win-demo.img: $(BUILD)/stage1.bin $(BUILD)/stage2.bin $(BUILD)/kernel.bin $(BUILD)/win_app.bin
 	dd if=/dev/zero of=$@ bs=512 count=2880 status=none
