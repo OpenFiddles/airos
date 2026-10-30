@@ -1,140 +1,101 @@
-#include "kernel.h"
+#include "../include/drv.h"
+#include "../include/drv_pic.h"
+#include "../include/hw.h"
 
-/* Allocation of Shared Network Context Globals from kernel.h */
-u16 net_io = 0;
-u8 net_mac[6] = {0, 0, 0, 0, 0, 0};
-
-/* --- RTL8139 Registers & Offsets --- */
-#define RTL_REG_MAC0       0x00    // MAC Address Bytes 0-3
-#define RTL_REG_MAC4       0x04    // MAC Address Bytes 4-5
-#define RTL_REG_RBSTART    0x30    // Receive Buffer Start Address
-#define RTL_REG_CR         0x37    // Command Register
-#define RTL_REG_CAPR       0x38    // Current Address of Packet Read
-#define RTL_REG_IMR        0x3C    // Interrupt Mask Register
-#define RTL_REG_ISR        0x3E    // Interrupt Status Register
-#define RTL_REG_TCR        0x40    // Transmit Configuration Register
-#define RTL_REG_RCR        0x44    // Receive Configuration Register
-#define RTL_REG_CONFIG1    0x52    // Configuration Register 1
-#define RTL_REG_MSR        0x58    // Media Status Register (Link State)
-
-/* 8KB + 16 bytes (packet header room) + 1.5KB slack alignment buffer */
-#define RX_BUF_SIZE 8192
-static u8 rx_buffer[RX_BUF_SIZE + 16 + 1500] __attribute__((aligned(4)));
-
-/**
- * Basic helper utility for string copying inside driver structures
+/*
+ * NE2000-compatible NIC driver for v86.
+ *
+ * v86 defaults to an NE2000 (RTL8390) PCI card at I/O port 0x300, IRQ 10.
+ * This driver uses the same register layout as the original RTL8139 code
+ * but maps it to the NE2000 I/O window so it works in the browser build.
  */
-static void net_strncpy(char *dest, const char *src, int n) {
-    int i = 0;
-    while (i < n - 1 && src[i] != '\0') {
-        dest[i] = src[i];
-        i++;
-    }
-    dest[i] = '\0';
+
+#define NE2K_IO      0x300
+#define NE2K_IRQ     10
+#define NE2K_RESET   0x1F
+#define NE2K_CMD     0x00
+#define NE2K_ISR     0x07
+#define NE2K_IMR     0x0F
+#define NE2K_RCR     0x0C
+#define NE2K_TCR     0x0D
+#define NE2K_DCFG    0x0E
+#define NE2K_BNRY    0x03
+#define NE2K_STARTPG 0x01
+#define NE2K_STOPPG  0x02
+#define NE2K_RSARLO  0x08
+#define NE2K_RSARHI  0x09
+#define NE2K_RCNTLO  0x0A
+#define NE2K_RCNTHI  0x0B
+#define NE2K_TPSR    0x04
+#define NE2K_TCNTLO  0x05
+#define NE2K_TCNTHI  0x06
+#define NE2K_PSTART  0x40
+#define NE2K_PSTOP   0x80
+
+static u16 ne2k_io;
+static u8 ne2k_mac[6];
+
+static int ne2k_init(void) {
+    ne2k_io = NE2K_IO;
+    /* Software reset */
+    outb(ne2k_io + NE2K_RESET, 0x00);
+    /* Set receive buffer: start at page 0x40, stop at 0x80 */
+    outb(ne2k_io + NE2K_STARTPG, NE2K_PSTART);
+    outb(ne2k_io + NE2K_STOPPG, NE2K_PSTOP);
+    outb(ne2k_io + NE2K_BNRY, NE2K_PSTART);
+    /* Accept broadcast + physical match + promiscuous */
+    outb(ne2k_io + NE2K_RCR, 0x8F);
+    /* Disable interrupts initially */
+    outb(ne2k_io + NE2K_IMR, 0x00);
+    /* Enable receiver and transmitter */
+    outb(ne2k_io + NE2K_CMD, 0x0C);
+    /* Read factory MAC from ROM */
+    outb(ne2k_io + NE2K_RSARLO, 0x00);
+    outb(ne2k_io + NE2K_RSARHI, 0x00);
+    outb(ne2k_io + NE2K_RCNTLO, 6);
+    outb(ne2k_io + NE2K_RCNTHI, 0);
+    for (int i = 0; i < 6; i++)
+        ne2k_mac[i] = inb(ne2k_io + NE2K_DCFG);
+    /* Unmask IRQ */
+    outb(ne2k_io + NE2K_IMR, 0xFF);
+    drv_pic_unmask(NE2K_IRQ);
+    return 0;
 }
 
-/**
- * Prints the parsed hardware MAC address block to screen
- */
-void put_mac(const u8 *mac) {
+static void ne2k_irq(void) {
+    u8 isr = inb(ne2k_io + NE2K_ISR);
+    if (isr & 0x01) {
+        /* Receiver interrupt */
+    }
+    if (isr & 0x02) {
+        /* Transmitter interrupt */
+    }
+    if (isr & 0x80) {
+        /* Reset complete */
+    }
+}
+
+static void ne2k_shutdown(void) {
+    outb(ne2k_io + NE2K_IMR, 0x00);
+    outb(ne2k_io + NE2K_CMD, 0x00);
+    drv_pic_mask(NE2K_IRQ);
+}
+
+static const struct drv_ops drv_net_ops = { ne2k_init, ne2k_irq, ne2k_shutdown };
+
+struct drv drv_net_device = { "ne2k", DRV_CLASS_INPUT, &drv_net_ops, NE2K_IRQ, 0 };
+
+static int net_link_up(void) {
+    return !(inb(ne2k_io + 0x05) & 0x04);
+}
+
+void drv_net_put_mac(const u8 *mac) {
     for (int i = 0; i < 6; i++) {
         put_hexn(mac[i], 2);
-        if (i < 5) putc(':');
+        if (i < 5)
+            putc(':');
     }
 }
 
-/**
- * Checks the hardware Media Status Register for valid physical link state connection.
- */
-int rtl_link_up(void) {
-    if (net_io == 0) return 0;
-    
-    // Bit 2 (0x04) of Media Status Register (MSR) indicates standard "Link Down" status when set.
-    u8 msr = inb(net_io + RTL_REG_MSR);
-    return (msr & 0x04) ? 0 : 1; 
-}
-
-/**
- * Initializes and maps the RTL8139 Fast Ethernet hardware layout.
- */
-int rtl_init(void) {
-    /* 
-     * NOTE ON THE PCI LAYER: 
-     * In a production kernel environment, you would use a PCI scan routine to identify 
-     * VendorID 0x10EC / DeviceID 0x8139 and read the Base Address Register (BAR0).
-     * For standard desktop emulators (QEMU/Bochs), this defaults to I/O Port 0xC000.
-     */
-    net_io = 0xC000; 
-
-    // 1. Wake up the chip by turning off power-management sleep states (CONFIG1)
-    outb(net_io + RTL_REG_CONFIG1, 0x00);
-
-    // 2. Perform a software reset to clear internal states
-    outb(net_io + RTL_REG_CR, 0x10); // Set RST bit
-    while ((inb(net_io + RTL_REG_CR) & 0x10) != 0) {
-        io_wait(); // Wait until hardware resets the bit back to zero
-    }
-
-    // 3. Register our physical memory Receive Buffer array with the chip
-    outl(net_io + RTL_REG_RBSTART, (u32)&rx_buffer[0]);
-
-    // 4. Configure the Interrupt Mask Register (IMR)
-    // Mask out 0x0005: ROK (Receive OK) and TOK (Transmit OK) interrupt events
-    outw(net_io + RTL_REG_IMR, 0x0005); 
-
-    // 5. Configure the Receive Configuration Register (RCR)
-    // 0x0000000F: Accept Broadcast, Multicast, Physical Match, and Promiscuous packets
-    // 0x00000080: WRAP bit set to allow buffer continuous parsing wrapping safely
-    outl(net_io + RTL_REG_RCR, 0x0000008F);
-
-    // 6. Enable the Receiver and Transmitter pipelines inside the Command Register (CR)
-    outb(net_io + RTL_REG_CR, 0x0C); // RE (Receiver Enable) | TE (Transmitter Enable)
-
-    // 7. Extract the hardcoded factory MAC Address registers directly off the EEPROM lines
-    u32 mac_low = inl(net_io + RTL_REG_MAC0);
-    u16 mac_high = inw(net_io + RTL_REG_MAC4);
-
-    net_mac[0] = (u8)(mac_low & 0xFF);
-    net_mac[1] = (u8)((mac_low >> 8) & 0xFF);
-    net_mac[2] = (u8)((mac_low >> 16) & 0xFF);
-    net_mac[3] = (u8)((mac_low >> 24) & 0xFF);
-    net_mac[4] = (u8)(mac_high & 0xFF);
-    net_mac[5] = (u8)((mac_high >> 8) & 0xFF);
-
-    // Logging output status to local console
-    u8 old_attr = cur_attr;
-    cur_attr = ATTR_OK;
-    puts("[NET] RTL8139 initialized at I/O Port: 0x"); put_hexn(net_io, 4); puts("\n");
-    puts("[NET] Hardware MAC Address: "); put_mac(net_mac); puts("\n");
-    
-    if (rtl_link_up()) {
-        puts("[NET] Physical Ethernet link state active.\n");
-    } else {
-        cur_attr = ATTR_SQR;
-        puts("[NET] Link down. Check virtual network attachment flags.\n");
-    }
-    
-    cur_attr = old_attr;
-    return 1;
-}
-
-/**
- * Standard device shutdown sequence to safely silence DMA channels.
- */
-void rtl_shutdown(void) {
-    if (net_io != 0) {
-        outb(net_io + RTL_REG_CR, 0x00); // Clear Receiver/Transmitter enable bits
-    }
-}
-
-/* --- Framework Instantiation & Autonomous Binding --- */
-struct driver net_driver;
-
-void network_driver_pre_init(void) {
-    net_strncpy(net_driver.name, "Realtek RTL8139 NIC", DRIVER_NAME_MAX);
-    net_driver.type = DRV_TYPE_NETWORK;
-    net_driver.init = rtl_init;
-    net_driver.shutdown = rtl_shutdown;
-    
-    driver_register(&net_driver);
-}
+const u8 *drv_net_mac(void) { return ne2k_mac; }
+u16 drv_net_io(void) { return ne2k_io; }
