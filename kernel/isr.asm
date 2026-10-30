@@ -10,7 +10,7 @@ extern timer_irq
 extern keyboard_irq
 extern cpu_fault
 extern airos_dispatch
-extern drv_dispatch_irq
+extern ne2k_irq
 
 isr_timer:
     pushad          ; Push EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI
@@ -73,7 +73,7 @@ isr_syscall:
 isr_ne2k:
     pushad
     cld
-    call drv_dispatch_irq
+    call ne2k_irq
     mov al, 0x20
     out 0x20, al
     popad
