@@ -17,14 +17,14 @@ OBJS = $(BUILD)/entry.o \
        $(BUILD)/keyboard.o \
        $(BUILD)/panic.o \
        $(BUILD)/rtl8139.o \
-       $(BUILD)/ne2k.o \
        $(BUILD)/mouse_cursor.o \
        $(BUILD)/mouse_init.o \
        $(BUILD)/pit_timer.o \
        $(BUILD)/axi.o \
        $(BUILD)/fs.o \
        $(BUILD)/sysdispatch.o \
-       $(BUILD)/airp.o
+       $(BUILD)/airp.o \
+       $(BUILD)/drv_net.o
 
 all: $(BUILD)/textile.img
 
@@ -68,9 +68,6 @@ $(BUILD)/panic.o: kernel/panic.c kernel/kernel.h kernel/textile.h | $(BUILD)
 $(BUILD)/rtl8139.o: kernel/rtl8139.c kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD)/ne2k.o: kernel/ne2k.c kernel/kernel.h kernel/textile.h | $(BUILD)
-	$(CC) $(CFLAGS) -c $< -o $@
-
 $(BUILD)/axi.o: kernel/axi.c include/axi.h kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -81,6 +78,9 @@ $(BUILD)/sysdispatch.o: kernel/sysdispatch.c kernel/kernel.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/airp.o: kernel/airp.c include/airp.h kernel/textile.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/drv_net.o: drivers/drv_net.c include/drv_net.h include/drv.h include/drv_pic.h include/hw.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # --- Modular Subsystem Drivers ---

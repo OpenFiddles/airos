@@ -5,6 +5,7 @@
 #include "../include/drv_kbd.h"
 #include "../include/drv_rtc.h"
 #include "../include/drv_speaker.h"
+#include "../include/drv_net.h"
 
 /* Order matters: the interrupt controller must come before anything that unmasks an IRQ. */
 int drv_register_builtin(void) {
@@ -15,6 +16,7 @@ int drv_register_builtin(void) {
         &drv_kbd_device,
         &drv_rtc_device,
         &drv_speaker_device,
+        &drv_net_device,
     };
     int ok = 0;
     for (unsigned int i = 0; i < sizeof(list) / sizeof(list[0]); i++)
