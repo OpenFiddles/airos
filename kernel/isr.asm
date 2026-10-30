@@ -4,6 +4,7 @@ global isr_timer
 global isr_keyboard
 global isr_fault
 global isr_syscall
+global isr_ne2k
 
 extern timer_irq
 extern keyboard_irq
