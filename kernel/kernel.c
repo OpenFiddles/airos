@@ -665,7 +665,7 @@ extern u32 cursor_x;
 extern u32 cursor_y;
 extern volatile u8 mouse_buttons;
 
-void syscall_dispatch(struct saved_regs *r) {
+u32 syscall_dispatch(struct saved_regs *r) {
     switch (r->eax) {
     case SYS_PUTC:
         putc((char)r->ebx);
@@ -712,6 +712,8 @@ void syscall_dispatch(struct saved_regs *r) {
         r->eax = (u32)-1;
         break;
     }
+
+    return r->eax; 
 }
 
 static int run_app(void) {
