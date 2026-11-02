@@ -35,6 +35,7 @@ extern u8 net_mac[6];
 /* --- Universal Mouse Tracking System Globals --- */
 extern u32 cursor_x;
 extern u32 cursor_y;
+extern volatile u8 mouse_buttons;
 
 /* System Call Parameter Mapping */
 struct saved_regs {

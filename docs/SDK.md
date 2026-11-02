@@ -33,3 +33,11 @@ Apps are flat x86 binaries. They run in ring 3 and call the kernel with `int 0x8
 - The disk image holds one app slot today, and `make sdk-example` does not put `hello.bin` on it. Launching apps from the desktop needs the app loader, which is not built yet.
 - No window API, files, or networking yet.
 - Syscall numbers must match `kernel/textile.h`.
+
+## Pointer, screen and files (v1, added with the phone build)
+
+- `flare_pointer()` returns `x`, `y` in text cells and `buttons` (bit 0 = left). The pointer is the PS/2 mouse; on a phone, touch drags move it and taps click.
+- `flare_screen(&cols, &rows)` returns the text grid size. The kernel is 80x25 VGA text, so this returns 80 and 25 today. The browser page scales the text to the phone's width.
+- Files: `flare_fs_open(name, mode)` with `FLARE_FS_READ`, `FLARE_FS_WRITE` (truncates) or `FLARE_FS_APPEND`; `flare_fs_read`, `flare_fs_write`, `flare_fs_seek`, `flare_fs_size`, `flare_fs_close`, `flare_fs_delete`, `flare_fs_list`. Names are up to 12 characters, a file is up to 512 bytes, there are 8 files and 4 open handles. Files live in RAM and are lost on reboot.
+
+`make fs-test` runs the filesystem checks on the host.

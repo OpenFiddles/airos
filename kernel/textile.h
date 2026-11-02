@@ -31,4 +31,7 @@ enum tx_syscall {
 
 enum tx_ease { EASE_LINEAR = 0, EASE_OUT_CUBIC = 1, EASE_IN_OUT = 2 };
 
+#define SYS_POINTER 29 /* eax = x | y << 8 | buttons << 16 */
+#define SYS_SCREEN 30 /* eax = cols | rows << 8 */
+
 #endif

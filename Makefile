@@ -192,3 +192,10 @@ $(BUILD)/hello.bin: $(BUILD)/hello.elf
 sdk-example: $(BUILD)/hello.bin
 
 .PHONY: sdk-example
+
+# --- Host test for the RAM filesystem (runs on this machine, not in the kernel) ---
+fs-test: | $(BUILD)
+	$(CC) -m32 -std=gnu99 -Wall -Wextra -Iinclude -o $(BUILD)/fs_host_test tests/fs_host_test.c
+	$(BUILD)/fs_host_test
+
+.PHONY: fs-test

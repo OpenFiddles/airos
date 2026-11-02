@@ -661,6 +661,10 @@ struct saved_regs {
     u32 edi, esi, ebp, esp_unused, ebx, edx, ecx, eax;
 };
 
+extern u32 cursor_x;
+extern u32 cursor_y;
+extern volatile u8 mouse_buttons;
+
 void syscall_dispatch(struct saved_regs *r) {
     switch (r->eax) {
     case SYS_PUTC:
@@ -697,6 +701,12 @@ void syscall_dispatch(struct saved_regs *r) {
         break;
     case SYS_PRINT:
         puts((const char *)r->ebx);
+        break;
+    case SYS_POINTER:
+        r->eax = (cursor_x & 0xFFu) | ((cursor_y & 0xFFu) << 8) | ((u32)(mouse_buttons & 0x07u) << 16);
+        break;
+    case SYS_SCREEN:
+        r->eax = (u32)VGA_COLS | ((u32)VGA_ROWS << 8);
         break;
     default:
         r->eax = (u32)-1;

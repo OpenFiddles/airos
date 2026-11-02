@@ -12,8 +12,12 @@
 #define SYS_FS_LIST   26  /* ebx = index among existing files, ecx = name buffer (FS_NAME_MAX + 1 bytes);
                              returns the file size or FS_FAIL past the last file */
 
+#define SYS_FS_SIZE  27  /* ebx = handle; returns the file size in bytes */
+#define SYS_FS_SEEK  28  /* ebx = handle, ecx = position (0..size); returns position or FS_FAIL */
+
 #define FS_READ 0
 #define FS_WRITE 1
+#define FS_APPEND 2  /* write at the end, creating the file if needed */
 #define FS_FAIL 0xFFFFFFFFu
 #define FS_NAME_MAX 12
 #define FS_FILE_MAX 512
@@ -48,6 +52,14 @@ static inline unsigned int fs_delete(const char *name) {
 
 static inline unsigned int fs_list(unsigned int index, char *name_out) {
     return fs_sys(SYS_FS_LIST, index, (unsigned int)(unsigned long)name_out, 0);
+}
+
+static inline unsigned int fs_size(unsigned int h) {
+    return fs_sys(SYS_FS_SIZE, h, 0, 0);
+}
+
+static inline unsigned int fs_seek(unsigned int h, unsigned int pos) {
+    return fs_sys(SYS_FS_SEEK, h, pos, 0);
 }
 
 #endif

@@ -81,7 +81,7 @@ static u32 fsk_open(u32 name_ptr, u32 mode) {
     char name[FS_NAME_MAX + 1];
     int file, slot, i;
 
-    if (mode > FS_WRITE || !fsk_copy_name(name, name_ptr))
+    if (mode > FS_APPEND || !fsk_copy_name(name, name_ptr))
         return FS_FAIL;
     file = fsk_find(name);
     if (file >= 0 && fsk_file_busy(file))
@@ -109,7 +109,7 @@ static u32 fsk_open(u32 name_ptr, u32 mode) {
     fsk_handles[slot].used = 1;
     fsk_handles[slot].mode = (u8)mode;
     fsk_handles[slot].file = (u8)file;
-    fsk_handles[slot].pos = 0;
+    fsk_handles[slot].pos = mode == FS_APPEND ? fsk_files[file].size : 0;
     return (u32)(slot + 1);
 }
 
@@ -136,7 +136,7 @@ static u32 fsk_write(u32 h, u32 buf, u32 count) {
     u32 room, n;
     const u8 *src = (const u8 *)buf;
 
-    if (!s || s->mode != FS_WRITE || !buf)
+    if (!s || s->mode == FS_READ || !buf)
         return FS_FAIL;
     f = &fsk_files[s->file];
     room = FS_FILE_MAX - s->pos;
@@ -191,6 +191,21 @@ static u32 fsk_list(u32 index, u32 name_out) {
     return FS_FAIL;
 }
 
+static u32 fsk_size(u32 h) {
+    struct fs_handle *s = fsk_get(h);
+    if (!s)
+        return FS_FAIL;
+    return fsk_files[s->file].size;
+}
+
+static u32 fsk_seek(u32 h, u32 pos) {
+    struct fs_handle *s = fsk_get(h);
+    if (!s || pos > fsk_files[s->file].size)
+        return FS_FAIL;
+    s->pos = pos;
+    return pos;
+}
+
 int fs_dispatch(struct saved_regs *r) {
     switch (r->eax) {
     case SYS_FS_OPEN:
@@ -210,6 +225,12 @@ int fs_dispatch(struct saved_regs *r) {
         return 1;
     case SYS_FS_LIST:
         r->eax = fsk_list(r->ebx, r->ecx);
+        return 1;
+    case SYS_FS_SIZE:
+        r->eax = fsk_size(r->ebx);
+        return 1;
+    case SYS_FS_SEEK:
+        r->eax = fsk_seek(r->ebx, r->ecx);
         return 1;
     default:
         return 0;
