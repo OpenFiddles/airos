@@ -922,3 +922,7 @@ void terminal_exec(const char *cmd) {
     run_command(buf);
     term_capture = 0;
 }
+
+u32 airos_dispatch(struct saved_regs *r) {
+    return syscall_dispatch(r);
+}

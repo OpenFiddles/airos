@@ -9,7 +9,7 @@ global isr_ne2k
 extern timer_irq
 extern keyboard_irq
 extern cpu_fault
-extern airos_dispatch
+extern syscall_dispatch
 extern ne2k_irq
 
 isr_timer:
@@ -60,7 +60,7 @@ isr_syscall:
     ; Pass the pointer to all saved registers to C; airos_dispatch tries the window
     ; and filesystem handlers first, then the base syscall table.
     push esp        
-    call airos_dispatch
+    call syscall_dispatch
     add esp, 4
     
     ; EAX is the standard return register in C/x86. 

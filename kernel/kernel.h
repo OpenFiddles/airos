@@ -58,6 +58,8 @@ struct driver {
     void (*shutdown)(void);
 };
 
+u32 syscall_dispatch(struct saved_regs *r);
+
 /* Assembly ISR Mapped Functions */
 void isr_timer(void);
 void isr_keyboard(void);
