@@ -267,7 +267,7 @@ struct gdt_entry {
     u8 base_mid;
     u8 access;
     u8 gran;
-    u16 base_high;
+    u8 base_high;
 } __attribute__((packed));
 
 struct gdt_ptr {
