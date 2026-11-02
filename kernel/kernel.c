@@ -1,4 +1,4 @@
-/* AirOS kernel: VGA console, COM1 mirror, PIC, PIT, PS/2 keyboard, CMOS clock, NE2000 NIC, tween engine, PC speaker, int 0x80 syscall gate and a flat app loaded at TX_APP_BASE. */
+/* FlareOS kernel: VGA console, COM1 mirror, PIC, PIT, PS/2 keyboard, CMOS clock, NE2000 NIC, tween engine, PC speaker, int 0x80 syscall gate and a flat app loaded at TX_APP_BASE. */
 
 #include "textile.h"
 
@@ -645,7 +645,7 @@ static void splash_frame(u8 bg) {
         }
     }
     splash_text(14, "OpenFiddles", 0x0F, bg);
-    splash_text(16, "AirOS", 0x07, bg);
+    splash_text(16, "FlareOS", 0x07, bg);
 }
 
 static void boot_splash(void) {
@@ -840,7 +840,7 @@ static void text_shell_run(void) {
     serial_str("ui: text mode\n");
     clear_screen();
     cur_attr = ATTR_OK;
-    puts("AirOS 0.3 kernel\n");
+    puts("FlareOS 0.3 kernel\n");
     cur_attr = ATTR_TEXT;
     puts("Text mode. Ctrl+Alt+D switches to the desktop. Type help.\n");
     puts("textile> ");

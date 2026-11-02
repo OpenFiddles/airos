@@ -1,7 +1,7 @@
 #ifndef AIROS_H
 #define AIROS_H
 
-/* AirOS app SDK: include this one header from an app in userland/ and link it with
+/* FlareOS app SDK: include this one header from an app in userland/ and link it with
    userland/app.ld. AIRP_APP(fn) marks fn as the app's main and emits the app head. */
 
 #include "../kernel/textile.h"

@@ -22,7 +22,7 @@ static void app_entry(void) {
 __attribute__((section(".head"), used))
 const u32 app_head[2] = { TX_APP_MAGIC, (u32)(unsigned long)app_entry };
 
-static const char title[] = "AirOS...";
+static const char title[] = "FlareOS...";
 
 static void put_at(u32 row, u32 col, u8 ch, u32 attr) {
     sys(SYS_PUTAT, row, col, (u32)ch | (attr << 8));

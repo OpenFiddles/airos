@@ -3,7 +3,7 @@
 #include "../include/hw.h"
 
 /*
- * AirOS network driver.
+ * FlareOS network driver.
  *
  * v86 (browser) uses an NE2000-compatible NIC at I/O port 0x300, IRQ 10.
  * QEMU defaults to an RTL8139 at I/O port 0xC000, IRQ 11.
@@ -59,7 +59,7 @@ static int net_link_up(void) {
     if (net_io == 0)
         return 0;
     if (is_rtl) {
-        u8 msr = inb(net_io + RTL_REG_MSR);
+        u8 msr = hw_inb(net_io + RTL_REG_MSR);
         return (msr & 0x04) ? 0 : 1;
     }
     return 1;
@@ -77,22 +77,22 @@ static int ne2k_init(void) {
     net_io = NE2K_IO;
     is_rtl = 0;
 
-    outb(net_io + NE2K_RESET, 0x00);
-    outb(net_io + NE2K_STARTPG, NE2K_PSTART);
-    outb(net_io + NE2K_STOPPG, NE2K_PSTOP);
-    outb(net_io + NE2K_BNRY, NE2K_PSTART);
-    outb(net_io + NE2K_RCR, 0x8F);
-    outb(net_io + NE2K_IMR, 0x00);
-    outb(net_io + NE2K_CMD, 0x0C);
+    hw_outb(net_io + NE2K_RESET, 0x00);
+    hw_outb(net_io + NE2K_STARTPG, NE2K_PSTART);
+    hw_outb(net_io + NE2K_STOPPG, NE2K_PSTOP);
+    hw_outb(net_io + NE2K_BNRY, NE2K_PSTART);
+    hw_outb(net_io + NE2K_RCR, 0x8F);
+    hw_outb(net_io + NE2K_IMR, 0x00);
+    hw_outb(net_io + NE2K_CMD, 0x0C);
 
-    outb(net_io + NE2K_RSARLO, 0x00);
-    outb(net_io + NE2K_RSARHI, 0x00);
-    outb(net_io + NE2K_RCNTLO, 6);
-    outb(net_io + NE2K_RCNTHI, 0);
+    hw_outb(net_io + NE2K_RSARLO, 0x00);
+    hw_outb(net_io + NE2K_RSARHI, 0x00);
+    hw_outb(net_io + NE2K_RCNTLO, 6);
+    hw_outb(net_io + NE2K_RCNTHI, 0);
     for (int i = 0; i < 6; i++)
-        net_mac[i] = inb(net_io + NE2K_DCFG);
+        net_mac[i] = hw_inb(net_io + NE2K_DCFG);
 
-    outb(net_io + NE2K_IMR, 0xFF);
+    hw_outb(net_io + NE2K_IMR, 0xFF);
     drv_pic_unmask(NE2K_IRQ);
     return 0;
 }
@@ -101,18 +101,18 @@ static int rtl_init(void) {
     net_io = RTL_IO;
     is_rtl = 1;
 
-    outb(net_io + RTL_REG_CONFIG1, 0x00);
-    outb(net_io + RTL_REG_CR, 0x10);
-    while ((inb(net_io + RTL_REG_CR) & 0x10) != 0)
-        io_wait();
+    hw_outb(net_io + RTL_REG_CONFIG1, 0x00);
+    hw_outb(net_io + RTL_REG_CR, 0x10);
+    while ((hw_inb(net_io + RTL_REG_CR) & 0x10) != 0)
+        hw_io_wait();
 
-    outl(net_io + RTL_REG_RBSTART, (u32)&rx_buffer[0]);
-    outw(net_io + RTL_REG_IMR, 0x0005);
-    outl(net_io + RTL_REG_RCR, 0x0000008F);
-    outb(net_io + RTL_REG_CR, 0x0C);
+    hw_outl(net_io + RTL_REG_RBSTART, (u32)&rx_buffer[0]);
+    hw_outw(net_io + RTL_REG_IMR, 0x0005);
+    hw_outl(net_io + RTL_REG_RCR, 0x0000008F);
+    hw_outb(net_io + RTL_REG_CR, 0x0C);
 
-    u32 mac_low = inl(net_io + RTL_REG_MAC0);
-    u16 mac_high = inw(net_io + RTL_REG_MAC4);
+    u32 mac_low = hw_inl(net_io + RTL_REG_MAC0);
+    u16 mac_high = hw_inw(net_io + RTL_REG_MAC4);
     net_mac[0] = (u8)(mac_low & 0xFF);
     net_mac[1] = (u8)((mac_low >> 8) & 0xFF);
     net_mac[2] = (u8)((mac_low >> 16) & 0xFF);
@@ -124,13 +124,13 @@ static int rtl_init(void) {
     return 0;
 }
 
-static void ne2k_irq(void) {
-    u8 isr = inb(net_io + NE2K_ISR);
+void ne2k_irq(void) {
+    u8 isr = hw_inb(net_io + NE2K_ISR);
     (void)isr;
 }
 
 static void rtl_irq(void) {
-    u16 isr = inw(net_io + RTL_REG_ISR);
+    u16 isr = hw_inw(net_io + RTL_REG_ISR);
     (void)isr;
 }
 
@@ -138,11 +138,11 @@ static void net_shutdown(void) {
     if (net_io == 0)
         return;
     if (is_rtl) {
-        outb(net_io + RTL_REG_CR, 0x00);
-        outw(net_io + RTL_REG_IMR, 0x0000);
+        hw_outb(net_io + RTL_REG_CR, 0x00);
+        hw_outw(net_io + RTL_REG_IMR, 0x0000);
     } else {
-        outb(net_io + NE2K_IMR, 0x00);
-        outb(net_io + NE2K_CMD, 0x00);
+        hw_outb(net_io + NE2K_IMR, 0x00);
+        hw_outb(net_io + NE2K_CMD, 0x00);
     }
     drv_pic_mask(is_rtl ? RTL_IRQ : NE2K_IRQ);
 }
@@ -152,12 +152,12 @@ static const struct drv_ops drv_net_ops = { 0, 0, net_shutdown };
 struct drv drv_net_device = { "net", DRV_CLASS_CHAR, &drv_net_ops, DRV_NO_IRQ, 0 };
 
 int drv_net_init(void) {
-    u8 cfg1 = inb(NE2K_IO + NE2K_DCFG);
+    u8 cfg1 = hw_inb(NE2K_IO + NE2K_DCFG);
     if (cfg1 != 0xFF && cfg1 != 0x00) {
         ne2k_init();
         drv_net_device.irq_line = NE2K_IRQ;
     } else {
-        u32 id = inl(RTL_IO + RTL_REG_MAC0);
+        u32 id = hw_inl(RTL_IO + RTL_REG_MAC0);
         if ((id & 0xFFFF) == 0x10EC && (id >> 16) == 0x8139) {
             rtl_init();
             drv_net_device.irq_line = RTL_IRQ;

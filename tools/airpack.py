@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wrap a linked AirOS app image in an .airp container.
+"""Wrap a linked FlareOS app image in an .airp container.
 
 Usage: airpack.py IMAGE.bin OUT.airp NAME
 

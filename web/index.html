@@ -3,7 +3,7 @@
 <head>
 <meta charset='utf-8'>
 <meta name='viewport' content='width=device-width, initial-scale=1'>
-<title>AirOS in the browser</title>
+<title>FlareOS in the browser</title>
 <style>
   :root { color-scheme: dark; }
   body { margin: 0; padding: 16px; background: #101113; color: #e8e8e8; font-family: system-ui, sans-serif; line-height: 1.5; }
@@ -24,8 +24,8 @@
 </head>
 <body>
 <main>
-  <h1>AirOS, running in your browser</h1>
-  <p>Click the black screen, then type. This is the AirOS kernel from the repo, running inside an x86 emulator (v86). Nothing to install, and it works in Safari on an iPad.</p>
+  <h1>FlareOS, running in your browser</h1>
+  <p>Click the black screen, then type. This is the FlareOS kernel from the repo, running inside an x86 emulator (v86). Nothing to install, and it works in Safari on an iPad.</p>
   <div id='screen'><div id='screen_container'><div></div><canvas></canvas></div></div>
   <p class='status' id='status'>Loading the emulator...</p>
   <div class='keys' aria-label='Keys for iPad and iPhone keyboards'>
@@ -67,7 +67,7 @@
   });
 
   emulator.add_listener('emulator-ready', () => {
-    status.textContent = 'Booting AirOS...';
+    status.textContent = 'Booting FlareOS...';
     reset.disabled = false;
     setKeysEnabled(true);
   });

@@ -191,7 +191,7 @@ static void draw_content(int k) {
         return;
     }
     if (k == WIN_HELLO) {
-        text(w->y + 2, w->x + 2, "Welcome to AirOS.", BODY_ATTR, w->w - 4);
+        text(w->y + 2, w->x + 2, "Welcome to FlareOS.", BODY_ATTR, w->w - 4);
         text(w->y + 3, w->x + 2, "Click an icon on the left", BODY_ATTR, w->w - 4);
         text(w->y + 4, w->x + 2, "or a button on the taskbar.", BODY_ATTR, w->w - 4);
         text(w->y + 6, w->x + 2, "Ctrl+Alt+D opens developer mode.", BODY_ATTR, w->w - 4);
@@ -239,7 +239,7 @@ static void draw_taskbar(void) {
     u8 t[6];
     int top = top_win();
     fill(TASK_ROW, 0, 1, VGA_COLS, ' ', TASK_ATTR);
-    text(TASK_ROW, 1, "AirOS", TASK_ATTR, 5);
+    text(TASK_ROW, 1, "FlareOS", TASK_ATTR, 7);
     for (int i = 0; i < WIN_COUNT; i++) {
         u8 a = !wins[i].open ? TASK_ATTR : (top == i ? BTN_TOP : BTN_OPEN);
         fill(TASK_ROW, btn_col(i), 1, 9, ' ', a);
@@ -258,7 +258,7 @@ static void draw_cursor(void) {
 
 static void draw_frame(void) {
     fill(0, 0, TASK_ROW, VGA_COLS, BG_CHAR, BG_ATTR);
-    text(0, 2, "AirOS home", 0x1E, 10);
+    text(0, 2, "FlareOS home", 0x1E, 12);
     for (int i = 0; i < WIN_COUNT; i++) {
         fill(icon_row[i], 2, 1, 9, ' ', ICON_ATTR);
         text(icon_row[i], 3, icon_label[i], ICON_ATTR, 7);

@@ -1,7 +1,7 @@
 #ifndef AXI_H
 #define AXI_H
 
-/* AirOS window API. Apps call the kernel through int 0x80, like the other syscalls.
+/* FlareOS window API. Apps call the kernel through int 0x80, like the other syscalls.
    A window is a kernel-owned frame: row 0 is the title bar with a [x] close box,
    rows 1..h-1 are the body. Body coordinates start at row 0, col 0 under the title bar. */
 

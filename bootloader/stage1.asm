@@ -115,7 +115,7 @@ lba         dw 0
 offset      dw 0
 remaining   dw 0
 track       db 0
-msg_loading db "Loading AirOS...", 13, 10, 0
+msg_loading db "Loading FlareOS...", 13, 10, 0
 msg_disk    db "Disk read error", 13, 10, 0
 
 times 510 - ($ - $$) db 0

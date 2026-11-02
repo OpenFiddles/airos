@@ -39,7 +39,7 @@ finally:
     proc.kill()
 
 checks = [
-    ('kernel banner', 'AirOS 0.3'),
+    ('kernel banner', 'FlareOS 0.3'),
     ('desktop boots first', 'desktop: start'),
     ('ctrl+alt+d enters text mode', 'ui: text mode'),
     ('help list', 'Commands:'),

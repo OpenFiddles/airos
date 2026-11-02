@@ -5,6 +5,9 @@ OBJCOPY = objcopy
 QEMU ?= qemu-system-i386
 BUILD = build
 
+DRV_SRCS = $(wildcard drivers/*.c)
+DRV_OBJS = $(patsubst drivers/%.c,$(BUILD)/d_%.o,$(DRV_SRCS))
+
 CFLAGS = -m32 -std=gnu99 -ffreestanding -fno-pic -fno-stack-protector -fno-builtin -fno-common -fno-tree-loop-distribute-patterns -fcf-protection=none -fno-asynchronous-unwind-tables -O2 -Wall -Wextra
 
 # Expanded to compile all the core kernel files visible in your tree
@@ -16,10 +19,10 @@ OBJS = $(BUILD)/entry.o \
        $(BUILD)/drivers.o \
        $(BUILD)/keyboard.o \
        $(BUILD)/panic.o \
-       $(BUILD)/rtl8139.o \
        $(BUILD)/mouse_cursor.o \
        $(BUILD)/mouse_init.o \
        $(BUILD)/pit_timer.o \
+       $(DRV_OBJS) \
        $(BUILD)/axi.o \
        $(BUILD)/fs.o \
        $(BUILD)/sysdispatch.o \
@@ -88,6 +91,12 @@ $(BUILD)/mouse_init.o: kernel/mouse_init.c kernel/kernel.h kernel/textile.h | $(
 
 $(BUILD)/pit_timer.o: kernel/pit_timer.c kernel/kernel.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/drv_pic.o: drivers/drv_pic.c include/drv_pic.h include/hw.h | $(BUILD)
+	$(CC) $(CFLAGS) -Iinclude -c $< -o $@
+
+$(BUILD)/d_%.o: drivers/%.c kernel/kernel.h kernel/textile.h include/*.h | $(BUILD)
+	$(CC) $(CFLAGS) -Iinclude -c $< -o $@
 
 # --- Linking and Image Creation ---
 $(BUILD)/kernel.elf: $(OBJS) kernel/link.ld
@@ -168,3 +177,18 @@ clean:
 	rm -rf $(BUILD)
 
 .PHONY: all run win-demo test clean
+
+# --- SDK example app (built on request, not on the disk image) ---
+$(BUILD)/hello.o: examples/hello/hello.c sdk/flareos.h | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/hello.elf: $(BUILD)/hello.o $(BUILD)/rt.o userland/app.ld
+	$(LD) -m elf_i386 -nostdlib -T userland/app.ld -o $@ $(BUILD)/hello.o $(BUILD)/rt.o
+
+$(BUILD)/hello.bin: $(BUILD)/hello.elf
+	$(OBJCOPY) -O binary $< $@
+	test `stat -c %s $@` -le 4096
+
+sdk-example: $(BUILD)/hello.bin
+
+.PHONY: sdk-example

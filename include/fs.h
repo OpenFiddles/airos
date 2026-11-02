@@ -1,7 +1,7 @@
 #ifndef FS_H
 #define FS_H
 
-/* AirOS RAM filesystem: a flat namespace of fixed-size files that live in kernel
+/* FlareOS RAM filesystem: a flat namespace of fixed-size files that live in kernel
    memory and vanish on reboot until a disk driver exists. A file can have one open
    handle at a time. Syscalls use int 0x80 like the rest of the ABI. */
 #define SYS_FS_OPEN   21  /* ebx = name, ecx = FS_READ or FS_WRITE; returns handle (1-4) or FS_FAIL */

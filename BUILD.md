@@ -1,4 +1,4 @@
-# Building AirOS (AirOS kernel)
+# Building FlareOS
 
 A small x86 hobby kernel: a 512-byte boot sector loads a 64-sector kernel, switches to 32-bit protected mode, and runs a shell.
 
