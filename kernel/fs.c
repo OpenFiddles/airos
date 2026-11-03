@@ -1,3 +1,9 @@
+/*
+FILE PATH: kernel/fs.c
+CONTRIBUTOR (Optional): Textile
+PURPOSE: RAM-backed flat filesystem for FlareOS: 8 files of up to 512 bytes, 4 open handles, and the dispatcher for syscalls 21-33. Contents are lost on reboot.
+*/
+
 #include "kernel.h"
 #include "../include/fs.h"
 
@@ -206,6 +212,38 @@ static u32 fsk_seek(u32 h, u32 pos) {
     return pos;
 }
 
+static u32 fsk_rename(u32 old_ptr, u32 new_ptr) {
+    char old_name[FS_NAME_MAX + 1];
+    char new_name[FS_NAME_MAX + 1];
+    int file, i;
+
+    if (!fsk_copy_name(old_name, old_ptr) || !fsk_copy_name(new_name, new_ptr))
+        return FS_FAIL;
+    file = fsk_find(old_name);
+    if (file < 0 || fsk_file_busy(file) || fsk_find(new_name) >= 0)
+        return FS_FAIL;
+    for (i = 0; new_name[i]; i++)
+        fsk_files[file].name[i] = new_name[i];
+    fsk_files[file].name[i] = 0;
+    return 0;
+}
+
+static u32 fsk_exists(u32 name_ptr) {
+    char name[FS_NAME_MAX + 1];
+
+    if (!fsk_copy_name(name, name_ptr))
+        return 0;
+    return fsk_find(name) >= 0 ? 1 : 0;
+}
+
+static u32 fsk_slots(void) {
+    u32 n = 0;
+    for (int i = 0; i < FS_FILES; i++)
+        if (!fsk_files[i].used)
+            n++;
+    return n;
+}
+
 int fs_dispatch(struct saved_regs *r) {
     switch (r->eax) {
     case SYS_FS_OPEN:
@@ -231,6 +269,15 @@ int fs_dispatch(struct saved_regs *r) {
         return 1;
     case SYS_FS_SEEK:
         r->eax = fsk_seek(r->ebx, r->ecx);
+        return 1;
+    case SYS_FS_RENAME:
+        r->eax = fsk_rename(r->ebx, r->ecx);
+        return 1;
+    case SYS_FS_EXISTS:
+        r->eax = fsk_exists(r->ebx);
+        return 1;
+    case SYS_FS_SLOTS:
+        r->eax = fsk_slots();
         return 1;
     default:
         return 0;

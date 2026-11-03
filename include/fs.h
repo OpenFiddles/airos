@@ -1,10 +1,16 @@
+/*
+FILE PATH: include/fs.h
+CONTRIBUTOR (Optional): Textile
+PURPOSE: FlareOS RAM filesystem syscall numbers, limits and the int 0x80 wrappers shared by the kernel and apps.
+*/
+
 #ifndef FS_H
 #define FS_H
 
 /* FlareOS RAM filesystem: a flat namespace of fixed-size files that live in kernel
    memory and vanish on reboot until a disk driver exists. A file can have one open
    handle at a time. Syscalls use int 0x80 like the rest of the ABI. */
-#define SYS_FS_OPEN   21  /* ebx = name, ecx = FS_READ or FS_WRITE; returns handle (1-4) or FS_FAIL */
+#define SYS_FS_OPEN   21  /* ebx = name, ecx = FS_READ, FS_WRITE or FS_APPEND; returns handle (1-4) or FS_FAIL */
 #define SYS_FS_READ   22  /* ebx = handle, ecx = buffer, edx = max bytes; returns bytes read or FS_FAIL */
 #define SYS_FS_WRITE  23  /* ebx = handle, ecx = buffer, edx = byte count; returns bytes written or FS_FAIL */
 #define SYS_FS_CLOSE  24  /* ebx = handle */
@@ -14,6 +20,10 @@
 
 #define SYS_FS_SIZE  27  /* ebx = handle; returns the file size in bytes */
 #define SYS_FS_SEEK  28  /* ebx = handle, ecx = position (0..size); returns position or FS_FAIL */
+
+#define SYS_FS_RENAME 31 /* ebx = old name, ecx = new name; returns 0 or FS_FAIL. Fails if the new name is taken or the old file has an open handle */
+#define SYS_FS_EXISTS 32 /* ebx = name; returns 1 if the file exists, otherwise 0 */
+#define SYS_FS_SLOTS  33 /* returns the number of unused file slots (out of FS_FILES) */
 
 #define FS_READ 0
 #define FS_WRITE 1
@@ -60,6 +70,18 @@ static inline unsigned int fs_size(unsigned int h) {
 
 static inline unsigned int fs_seek(unsigned int h, unsigned int pos) {
     return fs_sys(SYS_FS_SEEK, h, pos, 0);
+}
+
+static inline unsigned int fs_rename(const char *old_name, const char *new_name) {
+    return fs_sys(SYS_FS_RENAME, (unsigned int)(unsigned long)old_name, (unsigned int)(unsigned long)new_name, 0);
+}
+
+static inline unsigned int fs_exists(const char *name) {
+    return fs_sys(SYS_FS_EXISTS, (unsigned int)(unsigned long)name, 0, 0);
+}
+
+static inline unsigned int fs_slots(void) {
+    return fs_sys(SYS_FS_SLOTS, 0, 0, 0);
 }
 
 #endif
