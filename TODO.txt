@@ -1,0 +1,18 @@
+# AirOS / FlareOS TODO
+
+Source: LLM/TODO.txt (Ronreacus Adams, 2026-11-03)
+
+## Done on branch todo-bmp-boot-logo (MR open, not merged)
+- [x] BMP parser: include/bmp.h, kernel/bmp.c (24/32 bpp, uncompressed)
+- [x] resources/images/README.md with the file names requested
+
+## Next
+- [ ] Wire bmp.o into the Makefile
+- [ ] Graphics mode (1024x768) so there is a framebuffer to draw on
+- [ ] Draw BOOT_LOGO.bmp on the boot screen (needs graphics mode)
+- [ ] Draw icon_menubar.bmp in a MacOS-style menu bar
+- [ ] Generic driver interface (asked for in LLM/TODO.txt)
+- [ ] CI: release .iso, .bin and .img per architecture on GitHub, ARM included; GitLab keeps building
+
+## Status
+- Nothing compiled or booted yet. CI only compiles files the Makefile builds, so the new C files are not checked by CI.
