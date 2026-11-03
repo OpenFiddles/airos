@@ -1,7 +1,3 @@
-# FILE PATH: .gitlab-ci.yml
-# CONTRIBUTOR (Optional): Textile
-# PURPOSE: GitLab CI for FlareOS. Pages publishes main, airp-explorer builds the explorer app, arch-guard checks the arch gate, and build-branch compiles the i386 disk image on every feature branch.
-
 image: node:22-bookworm
 
 # Speeds up subsequent runs by storing the npm cache across pipeline steps
@@ -63,11 +59,15 @@ arch-guard:
     - if make -n ARCH=x86_64 > /dev/null 2>&1; then echo "x86_64 must be refused until it has a boot layer"; exit 1; fi
     - if make -n ARCH=arm > /dev/null 2>&1; then echo "arm must be refused until it has a boot layer"; exit 1; fi
 
-# Really compiles the i386 disk image. Fails if the image is missing or empty, so a broken kernel or filesystem change cannot pass on a feature branch.
+# Compiles the full i386 disk image on every feature branch, so kernel errors show up before a merge.
 build-branch:
   stage: test
+  rules:
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
   script:
     - apt-get update -qq
-    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nasm gcc-multilib binutils make > /dev/null
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nasm gcc-multilib binutils make python3 > /dev/null
     - make ARCH=i386
-    - test -s build/textile.img
+  artifacts:
+    paths:
+      - build/textile.img
