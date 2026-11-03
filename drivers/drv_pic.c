@@ -27,8 +27,9 @@ static int pic_init(void) {
     hw_io_wait();
     hw_outb(PIC2_DATA, 0x01);
     hw_io_wait();
-    hw_outb(PIC1_DATA, 0xFF);
-    hw_outb(PIC2_DATA, 0xFF);
+    /* Keep IRQ2 (cascade) and IRQ12 (PS/2 mouse) open. Masking every line here silences the mouse. */
+    hw_outb(PIC1_DATA, 0xF8);
+    hw_outb(PIC2_DATA, 0xEF);
     return 0;
 }
 
