@@ -1,0 +1,40 @@
+name: Mirror GitLab to GitHub
+
+# GitLab (gitlab.com/openfiddles/airos) is the source of truth.
+# This copies GitLab main to GitHub main every 15 minutes; GitHub's scheduler can run a few minutes late.
+# GitHub is a read-only mirror: commits made directly on GitHub main are overwritten on the next sync.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gitlab-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the GitHub mirror
+        uses: actions/checkout@v4
+
+      - name: Fetch GitLab main
+        run: |
+          git remote add gitlab https://gitlab.com/openfiddles/airos.git
+          git fetch --no-tags gitlab main
+
+      - name: Refuse to mirror a GitLab main that lacks this workflow
+        run: |
+          if ! git cat-file -e FETCH_HEAD:.github/workflows/gitlab-mirror.yml; then
+            echo "GitLab main has no .github/workflows/gitlab-mirror.yml; refusing to overwrite GitHub main." >&2
+            exit 1
+          fi
+
+      - name: Force GitHub main to match GitLab main
+        run: |
+          git push --force origin FETCH_HEAD:refs/heads/main
+          echo "GitHub main is now $(git rev-parse FETCH_HEAD)"
