@@ -13,8 +13,8 @@
   h1 { font-size: 1.25rem; margin: 0 0 4px; }
   p { margin: 6px 0 12px; color: #b5b5b5; overflow-wrap: anywhere; }
   a { color: #8fb4ff; }
-  #screen { background: #000; border-radius: 6px; padding: 8px; overflow: hidden; min-height: 160px; }
-  #screen_container { width: max-content; transform-origin: 0 0; white-space: pre; font: 14px/14px monospace; color: #ddd; }
+  #screen { background: #000; border-radius: 6px; padding: 8px; overflow: hidden; min-height: 160px; -webkit-text-size-adjust: none; text-size-adjust: none; }
+  #screen_container { width: max-content; transform-origin: 0 0; white-space: pre; font: 14px/14px monospace; color: #ddd; -webkit-text-size-adjust: none; text-size-adjust: none; }
   #screen_container canvas { display: block; cursor: crosshair; }
   .status { font-size: .95rem; color: #9aa; min-height: 1.5em; margin: 8px 0; }
   button { font: inherit; padding: 8px 12px; border-radius: 6px; border: 1px solid #444; background: #1c1d21; color: #eee; min-height: 44px; min-width: 44px; touch-action: manipulation; }
@@ -124,6 +124,7 @@
   }
   window.addEventListener('resize', fitScreen);
   window.addEventListener('orientationchange', fitScreen);
+  window.addEventListener('load', fitScreen);
 
   emulator.add_listener('emulator-ready', () => {
     statusLine.textContent = 'Booting FlareOS...';
@@ -136,6 +137,8 @@
   emulator.add_listener('emulator-started', () => {
     statusLine.textContent = 'Running. Tap the screen to type, or use the Type box on a phone.';
     fitScreen();
+    setTimeout(fitScreen, 300);
+    setTimeout(fitScreen, 1500);
   });
 
   screenContainer.addEventListener('click', () => {
