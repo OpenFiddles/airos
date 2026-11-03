@@ -1,3 +1,17 @@
+ARCH ?= i386
+SUPPORTED_ARCHES := i386
+
+ifeq ($(filter $(ARCH),$(SUPPORTED_ARCHES)),)
+$(error ARCH=$(ARCH) has no boot layer yet. Only i386 builds today. x86-64 and ARM need their own boot code first)
+endif
+
+# Add one block per architecture when its boot layer lands.
+ifeq ($(ARCH),i386)
+ARCH_CFLAGS  = -m32
+ARCH_ASFLAGS = -f elf32
+ARCH_LDFLAGS = -m elf_i386
+endif
+
 CC ?= gcc
 AS = nasm
 LD = ld
@@ -8,7 +22,7 @@ BUILD = build
 DRV_SRCS = $(wildcard drivers/*.c)
 DRV_OBJS = $(patsubst drivers/%.c,$(BUILD)/d_%.o,$(DRV_SRCS))
 
-CFLAGS = -m32 -std=gnu99 -ffreestanding -fno-pic -fno-stack-protector -fno-builtin -fno-common -fno-tree-loop-distribute-patterns -fcf-protection=none -fno-asynchronous-unwind-tables -O2 -Wall -Wextra
+CFLAGS = $(ARCH_CFLAGS) -std=gnu99 -ffreestanding -fno-pic -fno-stack-protector -fno-builtin -fno-common -fno-tree-loop-distribute-patterns -fcf-protection=none -fno-asynchronous-unwind-tables -O2 -Wall -Wextra
 
 # Expanded to compile all the core kernel files visible in your tree
 OBJS = $(BUILD)/entry.o \
@@ -43,13 +57,13 @@ $(BUILD)/stage2.bin: bootloader/stage2.asm | $(BUILD)
 
 # --- Kernel Core Assembly Objects ---
 $(BUILD)/entry.o: kernel/entry.asm | $(BUILD)
-	$(AS) -f elf32 $< -o $@
+	$(AS) $(ARCH_ASFLAGS) $< -o $@
 
 $(BUILD)/isr.o: kernel/isr.asm | $(BUILD)
-	$(AS) -f elf32 $< -o $@
+	$(AS) $(ARCH_ASFLAGS) $< -o $@
 
 $(BUILD)/usermode.o: kernel/usermode.asm | $(BUILD)
-	$(AS) -f elf32 $< -o $@
+	$(AS) $(ARCH_ASFLAGS) $< -o $@
 
 # --- Kernel Core C Objects ---
 $(BUILD)/desktop.o: kernel/desktop.c kernel/kernel.h kernel/textile.h | $(BUILD)
@@ -100,7 +114,7 @@ $(BUILD)/d_%.o: drivers/%.c kernel/kernel.h kernel/textile.h include/*.h | $(BUI
 
 # --- Linking and Image Creation ---
 $(BUILD)/kernel.elf: $(OBJS) kernel/link.ld
-	$(LD) -m elf_i386 -nostdlib -T kernel/link.ld -o $@ $(OBJS)
+	$(LD) $(ARCH_LDFLAGS) -nostdlib -T kernel/link.ld -o $@ $(OBJS)
 
 $(BUILD)/kernel.bin: $(BUILD)/kernel.elf
 	$(OBJCOPY) -O binary $< $@
@@ -115,7 +129,7 @@ $(BUILD)/rt.o: userland/rt.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/app.elf: $(BUILD)/app.o $(BUILD)/rt.o userland/app.ld
-	$(LD) -m elf_i386 -nostdlib -T userland/app.ld -o $@ $(BUILD)/app.o $(BUILD)/rt.o
+	$(LD) $(ARCH_LDFLAGS) -nostdlib -T userland/app.ld -o $@ $(BUILD)/app.o $(BUILD)/rt.o
 
 $(BUILD)/app.bin: $(BUILD)/app.elf
 	$(OBJCOPY) -O binary $< $@
@@ -127,7 +141,7 @@ $(BUILD)/explorer.o: userland/explorer.c include/axi.h include/fs.h kernel/texti
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/explorer.elf: $(BUILD)/explorer.o $(BUILD)/rt.o userland/app.ld
-	$(LD) -m elf_i386 -nostdlib -T userland/app.ld -o $@ $(BUILD)/explorer.o $(BUILD)/rt.o
+	$(LD) $(ARCH_LDFLAGS) -nostdlib -T userland/app.ld -o $@ $(BUILD)/explorer.o $(BUILD)/rt.o
 
 $(BUILD)/explorer.bin: $(BUILD)/explorer.elf
 	$(OBJCOPY) -O binary $< $@
@@ -150,7 +164,7 @@ $(BUILD)/win_app.o: userland/win_app.c include/axi.h kernel/textile.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/win_app.elf: $(BUILD)/win_app.o $(BUILD)/rt.o userland/app.ld
-	$(LD) -m elf_i386 -nostdlib -T userland/app.ld -o $@ $(BUILD)/win_app.o $(BUILD)/rt.o
+	$(LD) $(ARCH_LDFLAGS) -nostdlib -T userland/app.ld -o $@ $(BUILD)/win_app.o $(BUILD)/rt.o
 
 $(BUILD)/win_app.bin: $(BUILD)/win_app.elf
 	$(OBJCOPY) -O binary $< $@
@@ -183,7 +197,7 @@ $(BUILD)/hello.o: examples/hello/hello.c sdk/flareos.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD)/hello.elf: $(BUILD)/hello.o $(BUILD)/rt.o userland/app.ld
-	$(LD) -m elf_i386 -nostdlib -T userland/app.ld -o $@ $(BUILD)/hello.o $(BUILD)/rt.o
+	$(LD) $(ARCH_LDFLAGS) -nostdlib -T userland/app.ld -o $@ $(BUILD)/hello.o $(BUILD)/rt.o
 
 $(BUILD)/hello.bin: $(BUILD)/hello.elf
 	$(OBJCOPY) -O binary $< $@

@@ -13,7 +13,7 @@ pages:
   script:
     - apt-get update -qq
     - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nasm gcc-multilib binutils make seabios vgabios xorriso python3 > /dev/null
-    - make
+    - make ARCH=i386
     - mkdir -p public/v86 /tmp/v86
     - cp web/index.html public/index.html
     - cp build/textile.img public/textile.img
@@ -48,3 +48,13 @@ airp-explorer:
   artifacts:
     paths:
       - build/airp/explorer.airp
+
+# Confirms the build accepts i386 and refuses x86-64 and ARM until their boot layers exist.
+arch-guard:
+  stage: test
+  script:
+    - apt-get update -qq
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq make > /dev/null
+    - make -n ARCH=i386 > /dev/null
+    - if make -n ARCH=x86_64 > /dev/null 2>&1; then echo "x86_64 must be refused until it has a boot layer"; exit 1; fi
+    - if make -n ARCH=arm > /dev/null 2>&1; then echo "arm must be refused until it has a boot layer"; exit 1; fi
