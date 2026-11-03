@@ -2,33 +2,37 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8'>
-<meta name='viewport' content='width=device-width, initial-scale=1'>
+<meta name='viewport' content='width=device-width, initial-scale=1, viewport-fit=cover'>
 <title>FlareOS in the browser</title>
 <style>
   :root { color-scheme: dark; }
-  body { margin: 0; padding: 16px; background: #101113; color: #e8e8e8; font-family: system-ui, sans-serif; line-height: 1.5; }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  body { margin: 0; padding: 12px; background: #101113; color: #e8e8e8; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; line-height: 1.5; }
   main { max-width: 760px; margin: 0 auto; }
-  h1 { font-size: 1.3rem; margin: 0 0 4px; }
-  p { margin: 6px 0 12px; color: #b5b5b5; }
-  #screen { background: #000; border-radius: 6px; padding: 8px; overflow-x: auto; }
-  #screen_container { white-space: pre; font: 14px/14px monospace; color: #ddd; }
-  #screen_container canvas { display: block; max-width: 100%; cursor: crosshair; }
-  .status { font-size: .9rem; color: #9aa; min-height: 1.5em; }
-  button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid #444; background: #1c1d21; color: #eee; min-height: 44px; }
-  .keys { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
-  .keys button { min-width: 64px; }
-  #typebox { width: 100%; box-sizing: border-box; font: inherit; padding: 10px; border-radius: 6px; border: 1px solid #444; background: #0b0c0e; color: #eee; min-height: 44px; }
-  button:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
-  code { color: #e8e8e8; }
+  h1 { font-size: 1.25rem; margin: 0 0 4px; }
+  p { margin: 6px 0 12px; color: #b5b5b5; overflow-wrap: anywhere; }
+  a { color: #8fb4ff; }
+  #screen { background: #000; border-radius: 6px; padding: 8px; overflow: hidden; min-height: 160px; }
+  #screen_container { width: max-content; transform-origin: 0 0; white-space: pre; font: 14px/14px monospace; color: #ddd; }
+  #screen_container canvas { display: block; cursor: crosshair; }
+  .status { font-size: .95rem; color: #9aa; min-height: 1.5em; margin: 8px 0; }
+  button { font: inherit; padding: 8px 12px; border-radius: 6px; border: 1px solid #444; background: #1c1d21; color: #eee; min-height: 44px; min-width: 44px; touch-action: manipulation; }
+  button:disabled { opacity: .5; }
+  .keys { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin: 10px 0; }
+  #typebox { width: 100%; font: inherit; padding: 10px; border-radius: 6px; border: 1px solid #444; background: #0b0c0e; color: #eee; min-height: 44px; }
+  #typebox:disabled { opacity: .5; }
+  button:focus-visible, #typebox:focus-visible { outline: 2px solid #7aa2ff; outline-offset: 2px; }
+  code { color: #e8e8e8; overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
 <main>
   <h1>FlareOS, running in your browser</h1>
-  <p>Click the black screen, then type. This is the FlareOS kernel from the repo, running inside an x86 emulator (v86). Nothing to install, and it works in Safari on an iPad.</p>
+  <p>Tap the black screen, then type. This is the FlareOS kernel from the repo, running inside an x86 emulator (v86). Nothing to install.</p>
   <div id='screen'><div id='screen_container'><div></div><canvas></canvas></div></div>
-  <p class='status' id='status'>Loading the emulator...</p>
-  <div class='keys' aria-label='Keys for iPad and iPhone keyboards'>
+  <p class='status' id='status' role='status'>Loading the emulator...</p>
+  <div class='keys'>
     <button type='button' data-key='esc' disabled>Esc</button>
     <button type='button' data-key='tab' disabled>Tab</button>
     <button type='button' data-key='enter' disabled>Enter</button>
@@ -39,17 +43,32 @@
     <button type='button' data-key='right' disabled>Right</button>
     <button type='button' data-key='devmode' disabled>Ctrl+Alt+D</button>
   </div>
-  <p><label for='typebox'>Type here on iPad (keeps the keyboard open):</label></p>
-  <input id='typebox' type='text' autocapitalize='off' autocorrect='off' spellcheck='false' autocomplete='off' placeholder='Tap here, then type' disabled>
+  <p><label for='typebox'>Type box. Tap it to open the keyboard on a phone or iPad:</label></p>
+  <input id='typebox' type='text' inputmode='text' enterkeyhint='enter' autocapitalize='off' autocorrect='off' spellcheck='false' autocomplete='off' placeholder='Tap here, then type' disabled>
   <p><button id='reset' type='button' disabled>Restart the OS</button></p>
   <p>Press Ctrl+Alt+D to switch between the desktop and text mode. On the desktop, the Terminal window runs commands. Try: <code>help</code>, <code>time</code>, <code>uptime</code>, <code>in 60</code>, <code>echo hello</code>, <code>mouse 15 10</code>, <code>beep 440 200</code>.</p>
   <p>Source: <a href='https://gitlab.com/openfiddles/airos'>gitlab.com/openfiddles/airos</a></p>
 </main>
 <script src='v86/libv86.js'></script>
 <script>
-  const status = document.getElementById('status');
-  const reset = document.getElementById('reset');
+  const statusLine = document.getElementById('status');
+  const resetButton = document.getElementById('reset');
+  const screenWrap = document.getElementById('screen');
   const screenContainer = document.getElementById('screen_container');
+  const typebox = document.getElementById('typebox');
+  const keyButtons = document.querySelectorAll('[data-key]');
+
+  const SC = {
+    esc: [0x01, 0x81], tab: [0x0F, 0x8F], enter: [0x1C, 0x9C], backspace: [0x0E, 0x8E],
+    up: [0xE0, 0x48, 0xE0, 0xC8], down: [0xE0, 0x50, 0xE0, 0xD0],
+    left: [0xE0, 0x4B, 0xE0, 0xCB], right: [0xE0, 0x4D, 0xE0, 0xCD],
+    devmode: [0x1D, 0x38, 0x20, 0xA0, 0xB8, 0x9D]
+  };
+  const KEY_NAMES = {
+    Escape: 'esc', Tab: 'tab', Enter: 'enter', Backspace: 'backspace',
+    ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right'
+  };
+  const SENTINEL = ' ';
 
   const emulator = new V86({
     wasm_path: 'v86/v86.wasm',
@@ -66,61 +85,109 @@
     }
   });
 
-  emulator.add_listener('emulator-ready', () => {
-    status.textContent = 'Booting FlareOS...';
-    reset.disabled = false;
-    setKeysEnabled(true);
-  });
-
-  emulator.add_listener('emulator-started', () => {
-    status.textContent = 'Running. Click the screen and type.';
-  });
-
-  screenContainer.addEventListener('click', () => {
-    if (emulator.is_running()) {
-      emulator.mouse_set_status(true);
-    }
-  });
-
-  reset.addEventListener('click', () => emulator.restart());
-
-  const SC = {
-    esc: [0x01, 0x81], tab: [0x0F, 0x8F], enter: [0x1C, 0x9C], backspace: [0x0E, 0x8E],
-    up: [0xE0, 0x48, 0xE0, 0xC8], down: [0xE0, 0x50, 0xE0, 0xD0],
-    left: [0xE0, 0x4B, 0xE0, 0xCB], right: [0xE0, 0x4D, 0xE0, 0xCD],
-    devmode: [0x1D, 0x38, 0x20, 0xA0, 0xB8, 0x9D]
+  const sendKey = (name) => {
+    if (emulator.is_running()) emulator.keyboard_send_scancodes(SC[name]);
   };
-  const typebox = document.getElementById('typebox');
-  const keyButtons = document.querySelectorAll('[data-key]');
+
+  const resetTypebox = () => { typebox.value = SENTINEL; };
+
+  const flushTypebox = () => {
+    const text = typebox.value.startsWith(SENTINEL) ? typebox.value.slice(SENTINEL.length) : typebox.value;
+    if (text && emulator.is_running()) emulator.keyboard_send_text(text);
+    resetTypebox();
+  };
+
   const setKeysEnabled = (on) => {
     keyButtons.forEach((b) => { b.disabled = !on; });
     typebox.disabled = !on;
   };
 
-  keyButtons.forEach((b) => {
-    b.addEventListener('click', () => {
-      const codes = SC[b.dataset.key];
-      if (codes && emulator.is_running()) emulator.keyboard_send_scancodes(codes);
-    });
+  const fitScreen = () => {
+    const width = screenContainer.offsetWidth;
+    const height = screenContainer.offsetHeight;
+    if (!width || !height) {
+      screenContainer.style.transform = '';
+      screenWrap.style.height = '';
+      return;
+    }
+    const style = getComputedStyle(screenWrap);
+    const sidePadding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    const verticalPadding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const available = screenWrap.clientWidth - sidePadding;
+    const scale = Math.min(1, available / width);
+    screenContainer.style.transform = scale < 1 ? `scale(${scale})` : '';
+    screenWrap.style.height = Math.ceil(height * scale + verticalPadding) + 'px';
+  };
+
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(fitScreen).observe(screenContainer);
+  }
+  window.addEventListener('resize', fitScreen);
+  window.addEventListener('orientationchange', fitScreen);
+
+  emulator.add_listener('emulator-ready', () => {
+    statusLine.textContent = 'Booting FlareOS...';
+    resetButton.disabled = false;
+    setKeysEnabled(true);
+    resetTypebox();
+    fitScreen();
   });
 
+  emulator.add_listener('emulator-started', () => {
+    statusLine.textContent = 'Running. Tap the screen to type, or use the Type box on a phone.';
+    fitScreen();
+  });
+
+  screenContainer.addEventListener('click', () => {
+    if (!emulator.is_running()) return;
+    emulator.mouse_set_status(true);
+    typebox.focus({ preventScroll: true });
+  });
+
+  resetButton.addEventListener('click', () => {
+    emulator.restart();
+    resetTypebox();
+  });
+
+  keyButtons.forEach((b) => {
+    b.addEventListener('click', () => sendKey(b.dataset.key));
+  });
+
+  resetTypebox();
+
   typebox.addEventListener('keydown', (e) => {
-    const map = { Escape: 'esc', Tab: 'tab', Enter: 'enter', Backspace: 'backspace',
-                  ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
-    if (map[e.key]) {
+    if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'd') {
       e.preventDefault();
-      emulator.keyboard_send_scancodes(SC[map[e.key]]);
+      sendKey('devmode');
+      return;
+    }
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    const name = KEY_NAMES[e.key];
+    if (name) {
+      e.preventDefault();
+      sendKey(name);
     }
   });
+
   typebox.addEventListener('input', (e) => {
     if (e.isComposing) return;
-    const text = typebox.value;
-    if (text) emulator.keyboard_send_text(text);
-    typebox.value = '';
+    if (e.inputType === 'deleteContentBackward') {
+      sendKey('backspace');
+      resetTypebox();
+    } else if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') {
+      sendKey('enter');
+      resetTypebox();
+    } else {
+      flushTypebox();
+    }
+  });
+
+  typebox.addEventListener('compositionend', () => {
+    flushTypebox();
   });
 
   window.addEventListener('error', (e) => {
-    status.textContent = 'The emulator failed to load: ' + e.message;
+    statusLine.textContent = 'The emulator failed to load: ' + e.message;
   });
 </script>
 </body>
