@@ -1,3 +1,9 @@
+/*
+FILE PATH: tests/fs_host_test.c
+CONTRIBUTOR (Optional): Textile
+PURPOSE: Host-side checks for the FlareOS RAM filesystem. Compiles kernel/fs.c directly and drives it through fs_dispatch: open, read, write, seek, delete, list, rename, exists and free slots.
+*/
+
 #include <stdio.h>
 #include <string.h>
 #define putc fsk_test_putc
@@ -88,9 +94,29 @@ int main(void) {
     check(sys(SYS_FS_LIST, FS_FILES, addr(buf), 0) == FS_FAIL, "list past the last file fails");
 
     check(sys(SYS_FS_DELETE, addr("f0"), 0, 0) == 0, "delete f0");
+    check(sys(SYS_FS_SLOTS, 0, 0, 0) == 1, "one free slot after delete");
     h = sys(SYS_FS_OPEN, addr("newfile"), FS_APPEND, 0);
     check(h != FS_FAIL, "append creates a new file");
     sys(SYS_FS_CLOSE, h, 0, 0);
+    check(sys(SYS_FS_SLOTS, 0, 0, 0) == 0, "no free slots with eight files");
+
+    check(sys(SYS_FS_EXISTS, addr("newfile"), 0, 0) == 1, "exists finds newfile");
+    check(sys(SYS_FS_EXISTS, addr("ghost"), 0, 0) == 0, "exists misses ghost");
+
+    check(sys(SYS_FS_RENAME, addr("f1"), addr("renamed"), 0) == 0, "rename f1 to renamed");
+    check(sys(SYS_FS_EXISTS, addr("f1"), 0, 0) == 0, "old name is gone after rename");
+    check(sys(SYS_FS_EXISTS, addr("renamed"), 0, 0) == 1, "new name exists after rename");
+    check(sys(SYS_FS_RENAME, addr("renamed"), addr("f2"), 0) == FS_FAIL, "rename onto a taken name fails");
+    check(sys(SYS_FS_EXISTS, addr("renamed"), 0, 0) == 1, "failed rename keeps the source name");
+    check(sys(SYS_FS_RENAME, addr("ghost"), addr("x"), 0) == FS_FAIL, "rename of a missing file fails");
+    check(sys(SYS_FS_RENAME, addr("renamed"), addr("waytoolongname123"), 0) == FS_FAIL, "rename to an over-long name fails");
+
+    h = sys(SYS_FS_OPEN, addr("f3"), FS_READ, 0);
+    check(h != FS_FAIL, "open f3 for rename check");
+    check(sys(SYS_FS_RENAME, addr("f3"), addr("other"), 0) == FS_FAIL, "rename of an open file fails");
+    sys(SYS_FS_CLOSE, h, 0, 0);
+    check(sys(SYS_FS_RENAME, addr("f3"), addr("other"), 0) == 0, "rename works after close");
+    check(sys(SYS_FS_EXISTS, addr("other"), 0, 0) == 1, "other exists after rename");
 
     printf("%s: %d failure(s)\n", failures ? "FAILED" : "OK", failures);
     return failures ? 1 : 0;
