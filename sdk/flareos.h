@@ -2,10 +2,10 @@
 #define FLAREOS_SDK_H
 
 /*
- * FlareOS app SDK, version 1.
+ * FlareOS app SDK, version 1.1.
  * Apps are flat binaries linked at FLARE_APP_BASE (userland/app.ld), capped at
  * FLARE_APP_MAX_BYTES, running in ring 3. They call the kernel with int 0x80.
- * The FLARE_SYS_* numbers must match kernel/textile.h.
+ * The FLARE_SYS_* numbers must match kernel/textile.h and include/fs.h.
  */
 
 typedef unsigned char flare_u8;
@@ -50,6 +50,9 @@ typedef int flare_i32;
 #define FLARE_SYS_FS_LIST 26u
 #define FLARE_SYS_FS_SIZE 27u
 #define FLARE_SYS_FS_SEEK 28u
+#define FLARE_SYS_FS_RENAME 31u
+#define FLARE_SYS_FS_EXISTS 32u
+#define FLARE_SYS_FS_SLOTS 33u
 
 #define FLARE_FS_READ 0u
 #define FLARE_FS_WRITE 1u
@@ -57,6 +60,7 @@ typedef int flare_i32;
 #define FLARE_FS_FAIL 0xFFFFFFFFu
 #define FLARE_FS_NAME_MAX 12u
 #define FLARE_FS_FILE_MAX 512u
+#define FLARE_FS_FILES 8u
 
 static inline flare_u32 flare_call(flare_u32 n, flare_u32 b, flare_u32 c, flare_u32 d) {
     flare_u32 ret;
@@ -168,6 +172,21 @@ static inline flare_u32 flare_fs_size(flare_u32 h) {
 
 static inline flare_u32 flare_fs_seek(flare_u32 h, flare_u32 pos) {
     return flare_call(FLARE_SYS_FS_SEEK, h, pos, 0);
+}
+
+/* Renames old to new. Returns 0, or FLARE_FS_FAIL if new is taken or old has an open handle. */
+static inline flare_u32 flare_fs_rename(const char *old_name, const char *new_name) {
+    return flare_call(FLARE_SYS_FS_RENAME, (flare_u32)(unsigned long)old_name, (flare_u32)(unsigned long)new_name, 0);
+}
+
+/* Returns 1 if the file exists, 0 otherwise. */
+static inline flare_u32 flare_fs_exists(const char *name) {
+    return flare_call(FLARE_SYS_FS_EXISTS, (flare_u32)(unsigned long)name, 0, 0);
+}
+
+/* Returns how many of the 8 file slots are unused. */
+static inline flare_u32 flare_fs_slots(void) {
+    return flare_call(FLARE_SYS_FS_SLOTS, 0, 0, 0);
 }
 
 #define FLARE_APP() \
